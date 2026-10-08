@@ -317,6 +317,52 @@ Tes database memakai `sqflite_common_ffi` dan butuh pustaka SQLite di mesin host
 (Windows: `sqlite3.dll` di `PATH`; Linux: `libsqlite3-dev`). Tes `api_client` dan
 `currency_formatter` tidak membutuhkannya.
 
+### 6. Tahap 7 — Autentikasi Flutter
+Tidak ada paket baru. Salin ulang folder `lib/` dan `test/` dari `mobile/` ke
+`kasir_kantin` (timpa file yang sama).
+
+**File yang berubah (timpa):** `lib/main.dart`, `lib/app/app.dart`,
+`lib/app/app_shell.dart`, `lib/core/network/api_client.dart` (stream
+`unauthorized` + parameter `reportUnauthorized`), `lib/core/storage/session_storage.dart`
+(menyimpan token **dan** profil), `lib/core/theme/app_colors.dart` (dua warna lembut untuk banner).
+
+**File baru:** `lib/app/auth_gate.dart`, `lib/app/settings_page.dart`, dan seluruh
+`lib/features/auth/` (`domain/`, `data/`, `presentation/bloc/`, `presentation/pages/`),
+beserta tesnya di `test/features/auth/`, `test/app/`, dan
+`test/core/network/api_client_unauthorized_test.dart`.
+
+**Perilaku yang dibangun:**
+- **Sesi bertahan offline.** Saat aplikasi dibuka, sesi dipulihkan dari penyimpanan
+  aman **tanpa** menunggu server. Hanya login pertama yang butuh internet.
+- **Keluar tidak menghapus data lokal.** `logout` mencabut token di server bila
+  bisa (maks. 3 detik), lalu selalu menghapus token + profil dari perangkat. Database
+  SQLite (termasuk transaksi yang belum tersinkron) tidak disentuh (AGENTS.md Rule 6).
+  Jika pencabutan di server gagal (offline), token itu tetap valid di server sampai
+  dihapus; tidak berbahaya karena token sudah hilang dari HP.
+- **Sesi berakhir (401).** Respons 401 pada permintaan bertoken (mis. katalog di
+  tahap 8) membuat `AuthBloc` menghapus sesi lokal dan menampilkan pesan
+  "Sesi berakhir. Silakan masuk kembali." 401 pada login **bukan** sesi berakhir
+  (artinya kredensial salah).
+- **Kirim ganda dicegah** di dua lapis: tombol nonaktif saat memproses, dan
+  `AuthBloc` mengabaikan login saat sudah `AuthInProgress`.
+
+**Verifikasi otomatis:** `cd kasir_kantin; flutter test`
+
+**Verifikasi manual di HP.** Siapkan: server Laravel berjalan, `adb reverse`
+aktif (bagian B.4), akun kasir **dan** owner sudah dibuat (bagian A.7).
+1. Kolom kosong → "Email wajib diisi." / "Kata sandi wajib diisi."; email tanpa `@` → "Format email tidak valid."
+2. Kata sandi salah → banner "Email atau kata sandi salah."
+3. Masuk dengan akun **owner** → banner penolakan "...Gunakan dashboard web."
+4. Matikan server Laravel (atau mode pesawat) lalu masuk → banner menyebut koneksi internet.
+5. Masuk dengan akun kasir → tampil kerangka aplikasi. Tab **Pengaturan** menampilkan nama, email, dan "Kasir".
+6. **Uji offline:** tutup aplikasi sepenuhnya (swipe dari recent apps), aktifkan mode pesawat, buka lagi → langsung masuk, tanpa halaman login.
+7. Pengaturan → **Keluar** → dialog konfirmasi → kembali ke halaman login. Cek di MySQL
+   (`SELECT COUNT(*) FROM personal_access_tokens;`) token berkurang bila saat itu online.
+8. Ulangi Keluar dalam mode pesawat → tetap berhasil keluar.
+
+Jalur "sesi berakhir" belum bisa diuji manual karena belum ada fitur yang memakai
+token selain login; jalur itu diuji lewat tes otomatis dan baru terlihat nyata di tahap 8.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -325,7 +371,11 @@ Tes database memakai `sqflite_common_ffi` dan butuh pustaka SQLite di mesin host
   unik, dan item berformat snapshot. Migrasi eksplisit, tidak pernah drop-recreate.
 - `core/network/api_client.dart` + `core/error/api_exceptions.dart`: galat
   dipisah sesuai AGENTS.md §17 (jaringan / 401 / 403 / 422 / 409 / 5xx).
-- `core/storage/session_storage.dart`: token di secure storage.
+- `core/storage/session_storage.dart`: token dan profil pengguna di secure storage.
+- `features/auth/`: `AuthBloc` (pulihkan sesi, masuk, keluar, sesi berakhir),
+  `AuthRepository` + remote data source, halaman masuk berbahasa Indonesia, dan
+  `AuthGate` yang memilih layar berdasarkan status sesi.
+- `app/settings_page.dart`: kartu akun dan tombol Keluar (dengan konfirmasi).
 - `app/app_shell.dart`: navigasi bawah Kasir · Riwayat · Pengaturan, dengan
   keadaan kosong berbahasa Indonesia.
 
@@ -384,6 +434,45 @@ git add kasir_kantin
 git commit -m "feat(mobile): pakai font Inter dan izinkan HTTP untuk build debug"
 git add README.md
 git commit -m "docs: panduan run di HP Android dan alur git"
+```
+
+---
+
+### Push ke GitHub
+1. Di github.com: **New repository** → nama mis. `pos-kantin` → pilih **Private** →
+   **jangan** centang README / .gitignore / license (repositori harus kosong) → *Create*.
+2. Pastikan tidak ada rahasia yang terlacak Git:
+```powershell
+cd C:\DIL\pos-kantin
+git ls-files | Select-String "\.env"
+git status
+```
+   Hasil pertama hanya boleh `backend/.env.example` (dan `backend/.env.testing` hanya
+   bila isinya tanpa password). Jika `backend/.env` muncul: **berhenti**, jangan push.
+   `git status` harus bersih (`nothing to commit`).
+3. Hubungkan dan push:
+```powershell
+git remote add origin https://github.com/USERNAME/pos-kantin.git
+git branch -M main
+git push -u origin main
+```
+   Git for Windows akan membuka jendela login di browser (Git Credential Manager).
+   Password akun GitHub tidak diterima lagi di terminal; gunakan login browser atau
+   Personal Access Token.
+4. Seterusnya, setelah tiap `git commit`, jalankan `git push`.
+
+Jika rahasia (mis. isi `.env`) terlanjur ter-push, menghapus filenya tidak cukup karena
+tetap ada di riwayat: ganti rahasianya (password database, `APP_KEY`) dan minta bantuan
+membersihkan riwayatnya.
+
+**Commit tahap 7** (setelah `flutter test` lulus dan uji manual di HP berhasil):
+```powershell
+cd C:\DIL\pos-kantin
+git add kasir_kantin
+git commit -m "feat(mobile): autentikasi Flutter dengan AuthBloc, sesi offline, dan halaman masuk"
+git add README.md
+git commit -m "docs: panduan tahap 7 dan push ke GitHub"
+git push
 ```
 
 ---
