@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Izin INTERNET untuk hot reload & debugger (bawaan Flutter). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- HANYA build debug: izinkan HTTP polos ke server Laravel lokal
+         (php artisan serve tidak memakai HTTPS). Build release tidak terpengaruh. -->
+    <application android:usesCleartextTraffic="true"/>
+</manifest>
