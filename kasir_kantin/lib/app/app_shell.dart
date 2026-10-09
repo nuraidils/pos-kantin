@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../core/widgets/empty_state.dart';
+import 'settings_page.dart';
 
 /// Kerangka navigasi mobile: Kasir | Riwayat | Pengaturan (DESIGN.md §25,
 /// AGENTS.md §23). Bukan salinan sidebar dashboard.
-/// Isi tiap tab diganti oleh fitur masing-masing di tahap berikutnya.
+/// Isi tab Kasir dan Riwayat diganti oleh fitur masing-masing di tahap berikutnya.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -26,11 +27,7 @@ class _AppShellState extends State<AppShell> {
       title: 'Belum ada transaksi',
       message: 'Riwayat transaksi akan tampil di sini.',
     ),
-    EmptyState(
-      icon: Icons.settings_outlined,
-      title: 'Pengaturan',
-      message: 'Akun dan sinkronisasi akan tersedia di sini.',
-    ),
+    SettingsPage(),
   ];
 
   @override

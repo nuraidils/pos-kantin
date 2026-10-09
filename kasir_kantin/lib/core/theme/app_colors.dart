@@ -24,4 +24,8 @@ abstract final class AppColors {
   static const danger = Color(0xFFD64545); // gagal, destruktif
   static const info = Color(0xFF2B6CB0);
   static const offline = Color(0xFF6B7471); // netral & tenang, bukan merah (DESIGN.md §33)
+
+  // Latar lembut untuk banner pesan (selalu disertai ikon + teks, bukan warna saja).
+  static const dangerSoft = Color(0xFFFDECEC);
+  static const infoSoft = Color(0xFFE8F1FA);
 }

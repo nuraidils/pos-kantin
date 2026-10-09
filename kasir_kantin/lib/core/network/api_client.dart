@@ -20,13 +20,33 @@ class ApiClient {
   final Future<String?> Function() tokenProvider;
   final Duration timeout;
   final http.Client _http;
+  final _unauthorizedController = StreamController<void>.broadcast();
 
-  Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) {
-    return _send('GET', path, query: query);
+  /// Memancarkan event setiap kali server menjawab 401 pada permintaan yang
+  /// berlaku untuk sesi aktif (token kedaluwarsa/dicabut). AuthBloc
+  /// mendengarkan ini untuk mengakhiri sesi. Login/logout memakai
+  /// `reportUnauthorized: false` karena 401 di sana bukan "sesi berakhir".
+  Stream<void> get unauthorized => _unauthorizedController.stream;
+
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, String>? query,
+    bool reportUnauthorized = true,
+  }) {
+    return _send('GET', path, query: query, reportUnauthorized: reportUnauthorized);
   }
 
-  Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? body}) {
-    return _send('POST', path, body: body);
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Map<String, dynamic>? body,
+    bool reportUnauthorized = true,
+  }) {
+    return _send('POST', path, body: body, reportUnauthorized: reportUnauthorized);
+  }
+
+  void close() {
+    _unauthorizedController.close();
+    _http.close();
   }
 
   Future<Map<String, dynamic>> _send(
@@ -34,6 +54,7 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
     Map<String, dynamic>? body,
+    required bool reportUnauthorized,
   }) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     final token = await tokenProvider();
@@ -56,10 +77,13 @@ class ApiClient {
       throw const NetworkException();
     }
 
-    return _handle(response);
+    return _handle(response, reportUnauthorized: reportUnauthorized);
   }
 
-  Map<String, dynamic> _handle(http.Response response) {
+  Map<String, dynamic> _handle(
+    http.Response response, {
+    required bool reportUnauthorized,
+  }) {
     final status = response.statusCode;
     final json = _decode(response.body);
     final serverMessage = json['message'] as String?;
@@ -68,6 +92,9 @@ class ApiClient {
 
     switch (status) {
       case 401:
+        if (reportUnauthorized && !_unauthorizedController.isClosed) {
+          _unauthorizedController.add(null);
+        }
         throw UnauthorizedException(serverMessage ?? 'Sesi berakhir. Silakan masuk kembali.');
       case 403:
         throw ForbiddenException(serverMessage ?? 'Akun ini tidak memiliki akses.');
