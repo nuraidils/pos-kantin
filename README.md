@@ -276,6 +276,14 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api
 `adb reverse` hilang setiap kali kabel dicabut atau `adb` dimulai ulang; jalankan
 lagi bila aplikasi tiba-tiba tidak bisa terhubung.
 
+Agar tidak ada langkah yang terlewat, salin `run_dev.cmd` dari paket ke root
+`kasir_kantin`, lalu cukup jalankan (setelah `php artisan serve` aktif):
+```powershell
+.\run_dev.cmd
+```
+Skrip ini menjalankan `adb reverse` **dan** `flutter run` dengan `API_BASE_URL` yang benar.
+Argumen tambahan diteruskan ke `flutter run`, mis. `.\run_dev.cmd -d <id>`.
+
 *Opsi 2 — via Wi-Fi yang sama.* HP dan laptop harus di jaringan yang sama:
 ```powershell
 ipconfig        # catat "IPv4 Address" adapter Wi-Fi, mis. 192.168.1.10
@@ -301,6 +309,23 @@ tidak dipakai; gunakan Opsi 2.
 **d. Selama `flutter run` berjalan:** `r` = hot reload, `R` = restart penuh,
 `q` = berhenti. Bila ada lebih dari satu perangkat, tambahkan `-d <id>` dari
 `flutter devices`.
+
+**e. Banner "Tidak dapat terhubung ke internet" padahal internet lancar.**
+Banner ini muncul untuk **semua** kegagalan menjangkau server, bukan hanya internet
+mati. Periksa berurutan:
+1. Terminal `php artisan serve` masih berjalan?
+2. `adb reverse --list` harus menampilkan `tcp:8000 tcp:8000`. Jika kosong (mis. kabel
+   sempat tercabut), jalankan `adb reverse tcp:8000 tcp:8000`.
+3. Aplikasi dijalankan dengan `--dart-define=API_BASE_URL=http://127.0.0.1:8000/api`?
+   Tanpa itu, alamat bawaan `10.0.2.2` hanya berlaku untuk emulator dan **selalu gagal**
+   di HP fisik. Setiap `flutter run` baru harus menyertakannya; `run_dev.cmd` melakukannya otomatis.
+4. Uji dari HP: buka Chrome di HP, kunjungi `http://127.0.0.1:8000/up`. Jika halaman
+   tidak tampil, masalahnya di langkah 1-2, bukan di aplikasi.
+5. `adb devices` harus menampilkan `device` (bukan `unauthorized` atau kosong).
+
+> **Simulasi offline.** Selama memakai `adb reverse`, **mode pesawat tidak memutus**
+> koneksi ke server, karena lalu lintas lewat kabel USB. Untuk menguji kondisi
+> offline, hentikan `php artisan serve` (Ctrl+C) atau jalankan `adb reverse --remove-all`.
 
 **Laptop terbatas:** build pertama lama (Gradle mengunduh dependensi); build
 berikutnya jauh lebih cepat. Tutup aplikasi berat saat build. Jika build berhenti
@@ -353,12 +378,12 @@ aktif (bagian B.4), akun kasir **dan** owner sudah dibuat (bagian A.7).
 1. Kolom kosong → "Email wajib diisi." / "Kata sandi wajib diisi."; email tanpa `@` → "Format email tidak valid."
 2. Kata sandi salah → banner "Email atau kata sandi salah."
 3. Masuk dengan akun **owner** → banner penolakan "...Gunakan dashboard web."
-4. Matikan server Laravel (atau mode pesawat) lalu masuk → banner menyebut koneksi internet.
+4. **Simulasi offline:** hentikan `php artisan serve` (mode pesawat tidak memutus koneksi saat memakai `adb reverse`), lalu masuk → banner koneksi internet. Nyalakan server lagi sesudahnya.
 5. Masuk dengan akun kasir → tampil kerangka aplikasi. Tab **Pengaturan** menampilkan nama, email, dan "Kasir".
-6. **Uji offline:** tutup aplikasi sepenuhnya (swipe dari recent apps), aktifkan mode pesawat, buka lagi → langsung masuk, tanpa halaman login.
+6. **Uji sesi offline:** setelah masuk, hentikan `php artisan serve`, tutup aplikasi sepenuhnya (swipe dari recent apps), lalu buka lagi → langsung masuk ke kerangka aplikasi, tanpa halaman login.
 7. Pengaturan → **Keluar** → dialog konfirmasi → kembali ke halaman login. Cek di MySQL
    (`SELECT COUNT(*) FROM personal_access_tokens;`) token berkurang bila saat itu online.
-8. Ulangi Keluar dalam mode pesawat → tetap berhasil keluar.
+8. Masuk dulu (server hidup), lalu hentikan `php artisan serve` dan tekan **Keluar** → tetap berhasil keluar (bisa tertahan beberapa detik).
 
 Jalur "sesi berakhir" belum bisa diuji manual karena belum ada fitur yang memakai
 token selain login; jalur itu diuji lewat tes otomatis dan baru terlihat nyata di tahap 8.
