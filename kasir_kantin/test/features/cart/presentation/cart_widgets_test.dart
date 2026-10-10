@@ -224,6 +224,44 @@ void main() {
       verify(() => bloc.add(const CartCleared())).called(1);
     });
 
+    testWidgets('baris Total tidak tertutup tombol navigasi sistem', (
+      tester,
+    ) async {
+      whenListen(
+        bloc,
+        const Stream<CartState>.empty(),
+        initialState: CartState(items: [item(1, 'Kopi Susu')]),
+      );
+      const navBarHeight = 48.0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          builder: (context, child) => MediaQuery(
+            // Meniru ponsel dengan tombol navigasi 3 tombol di bawah.
+            data: MediaQuery.of(
+              context,
+            ).copyWith(padding: const EdgeInsets.only(bottom: navBarHeight)),
+            child: child!,
+          ),
+          home: Material(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: BlocProvider<CartBloc>.value(
+                value: bloc,
+                child: const CartSheet(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final screenHeight =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      final totalBottom = tester.getBottomLeft(find.text('Total (1 item)')).dy;
+
+      expect(totalBottom, lessThanOrEqualTo(screenHeight - navBarHeight));
+    });
+
     testWidgets('Batal pada konfirmasi tidak mengosongkan', (tester) async {
       await pumpSheet(tester, CartState(items: [item(1, 'Kopi Susu')]));
 

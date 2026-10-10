@@ -61,68 +61,78 @@ class CartSheet extends StatelessWidget {
     return BlocBuilder<CartBloc, CartState>(
       builder: (context, state) {
         if (state.isEmpty) {
-          return const SizedBox(
-            height: 320,
-            child: EmptyState(
-              icon: Icons.shopping_basket_outlined,
-              title: 'Keranjang masih kosong',
-              message: 'Tambahkan produk untuk mulai transaksi.',
+          return const SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 320,
+              child: EmptyState(
+                icon: Icons.shopping_basket_outlined,
+                title: 'Keranjang masih kosong',
+                message: 'Tambahkan produk untuk mulai transaksi.',
+              ),
             ),
           );
         }
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Row(
-                children: [
-                  Expanded(child: Text('Keranjang', style: text.headlineSmall)),
-                  TextButton.icon(
-                    onPressed: () => _confirmClear(context),
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Kosongkan'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.danger,
-                      minimumSize: const Size(44, 44),
+        // useSafeArea pada showModalBottomSheet TIDAK menghindari sisi bawah,
+        // jadi baris Total tertimpa tombol navigasi sistem tanpa ini.
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text('Keranjang', style: text.headlineSmall),
                     ),
-                  ),
-                ],
+                    TextButton.icon(
+                      onPressed: () => _confirmClear(context),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Kosongkan'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                        minimumSize: const Size(44, 44),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  itemCount: state.items.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.md),
+                  itemBuilder: (context, index) =>
+                      _CartItemTile(item: state.items[index]),
+                ),
+              ),
+              const Divider(),
+              Padding(
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                itemCount: state.items.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(height: AppSpacing.md),
-                itemBuilder: (context, index) =>
-                    _CartItemTile(item: state.items[index]),
-              ),
-            ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Total (${state.totalQuantity} item)',
-                      style: text.bodyLarge,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Total (${state.totalQuantity} item)',
+                        style: text.bodyLarge,
+                      ),
                     ),
-                  ),
-                  Text(
-                    formatRupiah(state.totalAmount),
-                    style: text.headlineSmall?.copyWith(
-                      color: AppColors.primary,
+                    Text(
+                      formatRupiah(state.totalAmount),
+                      style: text.headlineSmall?.copyWith(
+                        color: AppColors.primary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
