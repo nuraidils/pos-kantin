@@ -55,7 +55,13 @@ void main() {
   });
 
   test('menerima kelima status sinkronisasi', () async {
-    for (final status in ['pending', 'syncing', 'synced', 'failed', 'conflict']) {
+    for (final status in [
+      'pending',
+      'syncing',
+      'synced',
+      'failed',
+      'conflict',
+    ]) {
       await insertTransaction('uuid-$status', syncStatus: status);
     }
     expect(await appDb.db.query('transactions'), hasLength(5));
@@ -75,26 +81,36 @@ void main() {
     );
   });
 
-  test('menolak local_uuid ganda (satu transaksi lokal = satu identitas)', () async {
-    await insertTransaction('dup');
-    expect(() => insertTransaction('dup'), throwsA(isA<DatabaseException>()));
-  });
+  test(
+    'menolak local_uuid ganda (satu transaksi lokal = satu identitas)',
+    () async {
+      await insertTransaction('dup');
+      expect(() => insertTransaction('dup'), throwsA(isA<DatabaseException>()));
+    },
+  );
 
-  test('item ikut terhapus saat transaksi dihapus (foreign key aktif)', () async {
-    await insertTransaction('t1');
-    await appDb.db.insert('transaction_items', {
-      'transaction_uuid': 't1',
-      'product_id': 1,
-      'product_name': 'Es Teh',
-      'quantity': 2,
-      'price': 5000,
-      'subtotal': 10000,
-    });
+  test(
+    'item ikut terhapus saat transaksi dihapus (foreign key aktif)',
+    () async {
+      await insertTransaction('t1');
+      await appDb.db.insert('transaction_items', {
+        'transaction_uuid': 't1',
+        'product_id': 1,
+        'product_name': 'Es Teh',
+        'quantity': 2,
+        'price': 5000,
+        'subtotal': 10000,
+      });
 
-    await appDb.db.delete('transactions', where: 'local_uuid = ?', whereArgs: ['t1']);
+      await appDb.db.delete(
+        'transactions',
+        where: 'local_uuid = ?',
+        whereArgs: ['t1'],
+      );
 
-    expect(await appDb.db.query('transaction_items'), isEmpty);
-  });
+      expect(await appDb.db.query('transaction_items'), isEmpty);
+    },
+  );
 
   test('menolak item untuk transaksi yang tidak ada', () async {
     expect(

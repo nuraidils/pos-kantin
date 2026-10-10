@@ -6,6 +6,7 @@ import '../core/database/app_database.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/domain/auth_repository.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
+import '../features/products/domain/catalog_repository.dart';
 import 'auth_gate.dart';
 
 class App extends StatelessWidget {
@@ -13,27 +14,30 @@ class App extends StatelessWidget {
     super.key,
     required this.database,
     required this.authRepository,
+    required this.catalogRepository,
     this.sessionExpired,
   });
 
   final AppDatabase database;
   final AuthRepository authRepository;
+  final CatalogRepository catalogRepository;
 
   /// Event 401 dari ApiClient; AuthBloc mengakhiri sesi saat menerimanya.
   final Stream<void>? sessionExpired;
 
   @override
   Widget build(BuildContext context) {
-    // Repository fitur lain dibuat di composition root (main.dart) dan
-    // disediakan di sini pada tahap berikutnya; widget tidak menyentuh
-    // database langsung.
-    return RepositoryProvider<AppDatabase>.value(
-      value: database,
+    // Repository dibuat di composition root (main.dart) dan disediakan di
+    // sini; widget tidak menyentuh database atau API langsung.
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<AppDatabase>.value(value: database),
+        RepositoryProvider<CatalogRepository>.value(value: catalogRepository),
+      ],
       child: BlocProvider<AuthBloc>(
-        create: (_) => AuthBloc(
-          repository: authRepository,
-          sessionExpired: sessionExpired,
-        )..add(const AuthStarted()),
+        create: (_) =>
+            AuthBloc(repository: authRepository, sessionExpired: sessionExpired)
+              ..add(const AuthStarted()),
         child: MaterialApp(
           title: 'Kasir Kantin',
           debugShowCheckedModeBanner: false,

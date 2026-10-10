@@ -19,7 +19,10 @@ void main() {
     final client = buildClient(401);
     final event = client.unauthorized.first.timeout(const Duration(seconds: 1));
 
-    await expectLater(client.get('/catalog'), throwsA(isA<UnauthorizedException>()));
+    await expectLater(
+      client.get('/catalog'),
+      throwsA(isA<UnauthorizedException>()),
+    );
 
     await event; // selesai tanpa timeout = event terpancar
   });

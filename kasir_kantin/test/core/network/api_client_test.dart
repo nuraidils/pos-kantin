@@ -19,7 +19,11 @@ ApiClient buildClient(
 }
 
 http.Response jsonResponse(int status, Map<String, dynamic> body) =>
-    http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
+    http.Response(
+      jsonEncode(body),
+      status,
+      headers: {'content-type': 'application/json'},
+    );
 
 void main() {
   test('mengirim header Accept dan Authorization Bearer', () async {
@@ -29,12 +33,18 @@ void main() {
       return jsonResponse(200, {'ok': true});
     });
 
-    final result = await client.get('/catalog', query: {'updated_since': '2026-10-08T00:00:00Z'});
+    final result = await client.get(
+      '/catalog',
+      query: {'updated_since': '2026-10-08T00:00:00Z'},
+    );
 
     expect(result['ok'], true);
     expect(captured.headers['Accept'], 'application/json');
     expect(captured.headers['Authorization'], 'Bearer abc123');
-    expect(captured.url.queryParameters['updated_since'], '2026-10-08T00:00:00Z');
+    expect(
+      captured.url.queryParameters['updated_since'],
+      '2026-10-08T00:00:00Z',
+    );
   });
 
   test('tidak mengirim Authorization bila belum ada token', () async {
@@ -50,11 +60,20 @@ void main() {
   });
 
   test('401 -> UnauthorizedException', () {
-    final client = buildClient((_) async => jsonResponse(401, {'message': 'Email atau kata sandi salah.'}));
+    final client = buildClient(
+      (_) async =>
+          jsonResponse(401, {'message': 'Email atau kata sandi salah.'}),
+    );
 
     expect(
       client.post('/auth/login'),
-      throwsA(isA<UnauthorizedException>().having((e) => e.message, 'message', 'Email atau kata sandi salah.')),
+      throwsA(
+        isA<UnauthorizedException>().having(
+          (e) => e.message,
+          'message',
+          'Email atau kata sandi salah.',
+        ),
+      ),
     );
   });
 
@@ -64,44 +83,68 @@ void main() {
   });
 
   test('409 -> ConflictException membawa body', () {
-    final client = buildClient((_) async => jsonResponse(409, {'message': 'Stok tidak cukup.', 'code': 'insufficient_stock'}));
+    final client = buildClient(
+      (_) async => jsonResponse(409, {
+        'message': 'Stok tidak cukup.',
+        'code': 'insufficient_stock',
+      }),
+    );
 
     expect(
       client.post('/transactions'),
-      throwsA(isA<ConflictException>().having((e) => e.body['code'], 'code', 'insufficient_stock')),
+      throwsA(
+        isA<ConflictException>().having(
+          (e) => e.body['code'],
+          'code',
+          'insufficient_stock',
+        ),
+      ),
     );
   });
 
   test('422 -> ValidationException membawa detail field', () {
-    final client = buildClient((_) async => jsonResponse(422, {
-          'message': 'Data tidak valid.',
-          'errors': {
-            'email': ['Format email tidak valid.'],
-          },
-        }));
+    final client = buildClient(
+      (_) async => jsonResponse(422, {
+        'message': 'Data tidak valid.',
+        'errors': {
+          'email': ['Format email tidak valid.'],
+        },
+      }),
+    );
 
     expect(
       client.post('/auth/login'),
-      throwsA(isA<ValidationException>().having((e) => e.errors['email'], 'email', ['Format email tidak valid.'])),
+      throwsA(
+        isA<ValidationException>().having((e) => e.errors['email'], 'email', [
+          'Format email tidak valid.',
+        ]),
+      ),
     );
   });
 
   test('500 -> ServerException (dapat dicoba ulang)', () async {
-    final client = buildClient((_) async => http.Response('<html>error</html>', 500));
+    final client = buildClient(
+      (_) async => http.Response('<html>error</html>', 500),
+    );
 
     await expectLater(client.get('/catalog'), throwsA(isA<ServerException>()));
     expect(const ServerException().isRetryable, true);
   });
 
   test('tanpa koneksi -> NetworkException (dapat dicoba ulang)', () async {
-    final client = buildClient((_) async => throw const SocketException('tidak ada jaringan'));
+    final client = buildClient(
+      (_) async => throw const SocketException('tidak ada jaringan'),
+    );
 
     await expectLater(client.get('/catalog'), throwsA(isA<NetworkException>()));
     expect(const NetworkException().isRetryable, true);
   });
 
-  test('ValidationException dan ConflictException tidak dapat dicoba ulang', () {
-    expect(const ValidationException('x').isRetryable, false);
-    expect(const ConflictException('x').isRetryable, false);
-  });
+  test(
+    'ValidationException dan ConflictException tidak dapat dicoba ulang',
+    () {
+      expect(const ValidationException('x').isRetryable, false);
+      expect(const ConflictException('x').isRetryable, false);
+    },
+  );
 }

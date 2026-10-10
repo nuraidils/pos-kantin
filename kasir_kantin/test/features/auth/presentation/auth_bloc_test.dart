@@ -11,8 +11,16 @@ import 'package:mocktail/mocktail.dart';
 class MockAuthRepository extends Mock implements AuthRepository {}
 
 void main() {
-  const user = AuthUser(id: 1, name: 'Siti', email: 'siti@kantin.test', role: 'cashier');
-  const login = AuthLoginSubmitted(email: 'siti@kantin.test', password: 'rahasia-123');
+  const user = AuthUser(
+    id: 1,
+    name: 'Siti',
+    email: 'siti@kantin.test',
+    role: 'cashier',
+  );
+  const login = AuthLoginSubmitted(
+    email: 'siti@kantin.test',
+    password: 'rahasia-123',
+  );
 
   late MockAuthRepository repository;
 
@@ -21,10 +29,12 @@ void main() {
   });
 
   void stubLoginThrows(Object error) {
-    when(() => repository.login(
-          email: any(named: 'email'),
-          password: any(named: 'password'),
-        )).thenThrow(error);
+    when(
+      () => repository.login(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+      ),
+    ).thenThrow(error);
   }
 
   test('state awal adalah AuthUnknown', () {
@@ -55,7 +65,9 @@ void main() {
     blocTest<AuthBloc, AuthState>(
       'penyimpanan gagal dibaca -> belum masuk, tidak macet',
       build: () {
-        when(() => repository.restoreSession()).thenThrow(Exception('keystore'));
+        when(
+          () => repository.restoreSession(),
+        ).thenThrow(Exception('keystore'));
         return AuthBloc(repository: repository);
       },
       act: (bloc) => bloc.add(const AuthStarted()),
@@ -67,18 +79,22 @@ void main() {
     blocTest<AuthBloc, AuthState>(
       'kredensial benar -> InProgress lalu Authenticated',
       build: () {
-        when(() => repository.login(
-              email: any(named: 'email'),
-              password: any(named: 'password'),
-            )).thenAnswer((_) async => user);
+        when(
+          () => repository.login(
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+          ),
+        ).thenAnswer((_) async => user);
         return AuthBloc(repository: repository);
       },
       act: (bloc) => bloc.add(login),
       expect: () => [const AuthInProgress(), const AuthAuthenticated(user)],
-      verify: (_) => verify(() => repository.login(
-            email: 'siti@kantin.test',
-            password: 'rahasia-123',
-          )).called(1),
+      verify: (_) => verify(
+        () => repository.login(
+          email: 'siti@kantin.test',
+          password: 'rahasia-123',
+        ),
+      ).called(1),
     );
 
     blocTest<AuthBloc, AuthState>(
@@ -116,16 +132,25 @@ void main() {
       act: (bloc) => bloc.add(login),
       expect: () => [
         const AuthInProgress(),
-        isA<AuthFailure>().having((s) => s.message, 'message', contains('internet')),
+        isA<AuthFailure>().having(
+          (s) => s.message,
+          'message',
+          contains('internet'),
+        ),
       ],
     );
 
     blocTest<AuthBloc, AuthState>(
       'validasi server (422) -> membawa galat per kolom',
       build: () {
-        stubLoginThrows(const ValidationException('x', errors: {
-          'email': ['Format email tidak valid.'],
-        }));
+        stubLoginThrows(
+          const ValidationException(
+            'x',
+            errors: {
+              'email': ['Format email tidak valid.'],
+            },
+          ),
+        );
         return AuthBloc(repository: repository);
       },
       act: (bloc) => bloc.add(login),
@@ -149,7 +174,9 @@ void main() {
       act: (bloc) => bloc.add(login),
       expect: () => [
         const AuthInProgress(),
-        const AuthFailure(message: 'Terjadi masalah pada server. Coba lagi beberapa saat.'),
+        const AuthFailure(
+          message: 'Terjadi masalah pada server. Coba lagi beberapa saat.',
+        ),
       ],
     );
 
@@ -162,17 +189,21 @@ void main() {
       act: (bloc) => bloc.add(login),
       expect: () => [
         const AuthInProgress(),
-        const AuthFailure(message: 'Terjadi kesalahan yang tidak terduga. Coba lagi.'),
+        const AuthFailure(
+          message: 'Terjadi kesalahan yang tidak terduga. Coba lagi.',
+        ),
       ],
     );
 
     blocTest<AuthBloc, AuthState>(
       'kirim ganda saat sedang memproses diabaikan',
       build: () {
-        when(() => repository.login(
-              email: any(named: 'email'),
-              password: any(named: 'password'),
-            )).thenAnswer((_) async {
+        when(
+          () => repository.login(
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+          ),
+        ).thenAnswer((_) async {
           await Future<void>.delayed(const Duration(milliseconds: 10));
           return user;
         });
@@ -183,10 +214,12 @@ void main() {
         ..add(login),
       wait: const Duration(milliseconds: 50),
       expect: () => [const AuthInProgress(), const AuthAuthenticated(user)],
-      verify: (_) => verify(() => repository.login(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).called(1),
+      verify: (_) => verify(
+        () => repository.login(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+        ),
+      ).called(1),
     );
   });
 
@@ -214,7 +247,9 @@ void main() {
       seed: () => const AuthAuthenticated(user),
       act: (bloc) => bloc.add(const AuthSessionExpired()),
       expect: () => [
-        const AuthUnauthenticated(message: 'Sesi berakhir. Silakan masuk kembali.'),
+        const AuthUnauthenticated(
+          message: 'Sesi berakhir. Silakan masuk kembali.',
+        ),
       ],
       verify: (_) {
         verify(() => repository.clearSession()).called(1);
@@ -244,7 +279,9 @@ void main() {
       seed: () => const AuthAuthenticated(user),
       act: (_) => expired.add(null),
       expect: () => [
-        const AuthUnauthenticated(message: 'Sesi berakhir. Silakan masuk kembali.'),
+        const AuthUnauthenticated(
+          message: 'Sesi berakhir. Silakan masuk kembali.',
+        ),
       ],
     );
   });

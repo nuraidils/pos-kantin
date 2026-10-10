@@ -25,11 +25,11 @@ class AuthUser extends Equatable {
   final String role;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'email': email,
-        'role': role,
-      };
+    'id': id,
+    'name': name,
+    'email': email,
+    'role': role,
+  };
 
   @override
   List<Object?> get props => [id, name, email, role];

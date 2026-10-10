@@ -33,11 +33,11 @@ class _LoginPageState extends State<LoginPage> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
     context.read<AuthBloc>().add(
-          AuthLoginSubmitted(
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-          ),
-        );
+      AuthLoginSubmitted(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      ),
+    );
   }
 
   @override
@@ -70,7 +70,9 @@ class _LoginPageState extends State<LoginPage> {
                               height: 56,
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(AppRadius.lg),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.lg,
+                                ),
                               ),
                               child: const Icon(
                                 Icons.storefront_rounded,
@@ -83,7 +85,10 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: AppSpacing.xl),
                           Text('Kasir Kantin', style: text.headlineMedium),
                           const SizedBox(height: AppSpacing.xs),
-                          Text('Masuk untuk mulai berjualan.', style: text.bodySmall),
+                          Text(
+                            'Masuk untuk mulai berjualan.',
+                            style: text.bodySmall,
+                          ),
                           const SizedBox(height: AppSpacing.x3l),
                           if (notice != null) ...[
                             _MessageBanner(
@@ -113,10 +118,15 @@ class _LoginPageState extends State<LoginPage> {
                             enabled: !loading,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
-                            autofillHints: const [AutofillHints.username, AutofillHints.email],
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
+                            autofillHints: const [
+                              AutofillHints.username,
+                              AutofillHints.email,
+                            ],
+                            autovalidateMode:
+                                AutovalidateMode.onUserInteraction,
                             validator: validateEmail,
-                            onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                            onFieldSubmitted: (_) =>
+                                _passwordFocus.requestFocus(),
                             decoration: const InputDecoration(
                               labelText: 'Email',
                               hintText: 'nama@contoh.com',
@@ -131,7 +141,8 @@ class _LoginPageState extends State<LoginPage> {
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
                             autofillHints: const [AutofillHints.password],
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
+                            autovalidateMode:
+                                AutovalidateMode.onUserInteraction,
                             validator: validatePassword,
                             onFieldSubmitted: (_) => _submit(),
                             decoration: InputDecoration(
@@ -146,8 +157,9 @@ class _LoginPageState extends State<LoginPage> {
                                       ? Icons.visibility_outlined
                                       : Icons.visibility_off_outlined,
                                 ),
-                                onPressed: () =>
-                                    setState(() => _obscurePassword = !_obscurePassword),
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                               ),
                             ),
                           ),
@@ -163,7 +175,9 @@ class _LoginPageState extends State<LoginPage> {
                                       SizedBox(
                                         width: 18,
                                         height: 18,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
                                       ),
                                       SizedBox(width: AppSpacing.md),
                                       Text('Memproses...'),

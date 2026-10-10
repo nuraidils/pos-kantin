@@ -21,12 +21,17 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: BlocProvider<AuthBloc>.value(value: bloc, child: const LoginPage()),
+        home: BlocProvider<AuthBloc>.value(
+          value: bloc,
+          child: const LoginPage(),
+        ),
       ),
     );
   }
 
-  testWidgets('menampilkan kolom email, kata sandi, dan tombol Masuk', (tester) async {
+  testWidgets('menampilkan kolom email, kata sandi, dan tombol Masuk', (
+    tester,
+  ) async {
     await pumpPage(tester, const AuthUnauthenticated());
 
     expect(find.text('Email'), findsOneWidget);
@@ -34,7 +39,9 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Masuk'), findsOneWidget);
   });
 
-  testWidgets('form kosong -> pesan validasi dan tidak mengirim event', (tester) async {
+  testWidgets('form kosong -> pesan validasi dan tidak mengirim event', (
+    tester,
+  ) async {
     await pumpPage(tester, const AuthUnauthenticated());
 
     await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
@@ -45,7 +52,9 @@ void main() {
     verifyNever(() => bloc.add(any()));
   });
 
-  testWidgets('email tidak valid -> pesan format, tidak mengirim event', (tester) async {
+  testWidgets('email tidak valid -> pesan format, tidak mengirim event', (
+    tester,
+  ) async {
     await pumpPage(tester, const AuthUnauthenticated());
 
     await tester.enterText(find.byType(TextFormField).at(0), 'kasir');
@@ -60,21 +69,33 @@ void main() {
   testWidgets('isian valid -> mengirim AuthLoginSubmitted', (tester) async {
     await pumpPage(tester, const AuthUnauthenticated());
 
-    await tester.enterText(find.byType(TextFormField).at(0), ' kasir@kantin.test ');
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      ' kasir@kantin.test ',
+    );
     await tester.enterText(find.byType(TextFormField).at(1), 'rahasia-123');
     await tester.tap(find.widgetWithText(FilledButton, 'Masuk'));
     await tester.pump();
 
-    verify(() => bloc.add(const AuthLoginSubmitted(
+    verify(
+      () => bloc.add(
+        const AuthLoginSubmitted(
           email: 'kasir@kantin.test',
           password: 'rahasia-123',
-        ))).called(1);
+        ),
+      ),
+    ).called(1);
   });
 
-  testWidgets('saat memproses -> tombol nonaktif dan teks "Memproses..."', (tester) async {
+  testWidgets('saat memproses -> tombol nonaktif dan teks "Memproses..."', (
+    tester,
+  ) async {
     await pumpPage(tester, const AuthInProgress());
 
-    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNull,
+    );
     expect(find.text('Memproses...'), findsOneWidget);
   });
 
@@ -91,22 +112,31 @@ void main() {
 
     expect(find.text('Periksa kembali data yang Anda isi.'), findsOneWidget);
     expect(find.text('Format email tidak valid.'), findsOneWidget);
-    expect(find.byIcon(Icons.error_outline), findsOneWidget); // bukan warna saja
+    expect(
+      find.byIcon(Icons.error_outline),
+      findsOneWidget,
+    ); // bukan warna saja
   });
 
   testWidgets('sesi berakhir -> menampilkan pemberitahuan', (tester) async {
     await pumpPage(
       tester,
-      const AuthUnauthenticated(message: 'Sesi berakhir. Silakan masuk kembali.'),
+      const AuthUnauthenticated(
+        message: 'Sesi berakhir. Silakan masuk kembali.',
+      ),
     );
 
     expect(find.text('Sesi berakhir. Silakan masuk kembali.'), findsOneWidget);
   });
 
-  testWidgets('tombol mata menampilkan/menyembunyikan kata sandi', (tester) async {
+  testWidgets('tombol mata menampilkan/menyembunyikan kata sandi', (
+    tester,
+  ) async {
     await pumpPage(tester, const AuthUnauthenticated());
 
-    bool obscured() => tester.widget<EditableText>(find.byType(EditableText).at(1)).obscureText;
+    bool obscured() => tester
+        .widget<EditableText>(find.byType(EditableText).at(1))
+        .obscureText;
 
     expect(obscured(), isTrue);
     await tester.tap(find.byTooltip('Tampilkan kata sandi'));

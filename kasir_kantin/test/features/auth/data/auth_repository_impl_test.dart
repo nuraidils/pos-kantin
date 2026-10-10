@@ -14,7 +14,12 @@ class MockRemote extends Mock implements AuthRemoteDataSource {}
 class MockStorage extends Mock implements SessionStorage {}
 
 void main() {
-  const user = AuthUser(id: 1, name: 'Siti', email: 'siti@kantin.test', role: 'cashier');
+  const user = AuthUser(
+    id: 1,
+    name: 'Siti',
+    email: 'siti@kantin.test',
+    role: 'cashier',
+  );
 
   late MockRemote remote;
   late MockStorage storage;
@@ -29,56 +34,84 @@ void main() {
       logoutTimeout: const Duration(milliseconds: 50),
     );
     when(() => storage.clear()).thenAnswer((_) async {});
-    when(() => storage.saveSession(token: any(named: 'token'), user: any(named: 'user')))
-        .thenAnswer((_) async {});
+    when(
+      () => storage.saveSession(
+        token: any(named: 'token'),
+        user: any(named: 'user'),
+      ),
+    ).thenAnswer((_) async {});
   });
 
   group('login', () {
     test('menyimpan token dan profil lalu mengembalikan pengguna', () async {
-      when(() => remote.login(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-            deviceName: any(named: 'deviceName'),
-          )).thenAnswer((_) async => (token: '1|abc', user: user));
+      when(
+        () => remote.login(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+          deviceName: any(named: 'deviceName'),
+        ),
+      ).thenAnswer((_) async => (token: '1|abc', user: user));
 
-      final result = await repository.login(email: ' siti@kantin.test ', password: 'rahasia-123');
+      final result = await repository.login(
+        email: ' siti@kantin.test ',
+        password: 'rahasia-123',
+      );
 
       expect(result, user);
-      verify(() => remote.login(
-            email: 'siti@kantin.test', // di-trim
-            password: 'rahasia-123',
-            deviceName: any(named: 'deviceName'),
-          )).called(1);
-      final saved = verify(
-        () => storage.saveSession(token: '1|abc', user: captureAny(named: 'user')),
-      ).captured.single as String;
+      verify(
+        () => remote.login(
+          email: 'siti@kantin.test', // di-trim
+          password: 'rahasia-123',
+          deviceName: any(named: 'deviceName'),
+        ),
+      ).called(1);
+      final saved =
+          verify(
+                () => storage.saveSession(
+                  token: '1|abc',
+                  user: captureAny(named: 'user'),
+                ),
+              ).captured.single
+              as String;
       expect(jsonDecode(saved), user.toJson());
     });
 
     test('gagal -> melempar galat dan TIDAK menyimpan apa pun', () async {
-      when(() => remote.login(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-            deviceName: any(named: 'deviceName'),
-          )).thenThrow(const UnauthorizedException());
+      when(
+        () => remote.login(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+          deviceName: any(named: 'deviceName'),
+        ),
+      ).thenThrow(const UnauthorizedException());
 
       await expectLater(
         repository.login(email: 'a@b.c', password: 'salah'),
         throwsA(isA<UnauthorizedException>()),
       );
 
-      verifyNever(() => storage.saveSession(token: any(named: 'token'), user: any(named: 'user')));
+      verifyNever(
+        () => storage.saveSession(
+          token: any(named: 'token'),
+          user: any(named: 'user'),
+        ),
+      );
     });
   });
 
   group('restoreSession', () {
-    test('mengembalikan pengguna dari penyimpanan tanpa memanggil server', () async {
-      when(() => storage.readToken()).thenAnswer((_) async => '1|abc');
-      when(() => storage.readUser()).thenAnswer((_) async => jsonEncode(user.toJson()));
+    test(
+      'mengembalikan pengguna dari penyimpanan tanpa memanggil server',
+      () async {
+        when(() => storage.readToken()).thenAnswer((_) async => '1|abc');
+        when(
+          () => storage.readUser(),
+        ).thenAnswer((_) async => jsonEncode(user.toJson()));
 
-      expect(await repository.restoreSession(), user);
-      verifyZeroInteractions(remote);
-    });
+        expect(await repository.restoreSession(), user);
+        verifyZeroInteractions(remote);
+      },
+    );
 
     test('tidak ada data -> null', () async {
       when(() => storage.readToken()).thenAnswer((_) async => null);
@@ -88,13 +121,16 @@ void main() {
       verifyNever(() => storage.clear());
     });
 
-    test('sesi setengah jadi (token tanpa profil) -> dibersihkan, null', () async {
-      when(() => storage.readToken()).thenAnswer((_) async => '1|abc');
-      when(() => storage.readUser()).thenAnswer((_) async => null);
+    test(
+      'sesi setengah jadi (token tanpa profil) -> dibersihkan, null',
+      () async {
+        when(() => storage.readToken()).thenAnswer((_) async => '1|abc');
+        when(() => storage.readUser()).thenAnswer((_) async => null);
 
-      expect(await repository.restoreSession(), isNull);
-      verify(() => storage.clear()).called(1);
-    });
+        expect(await repository.restoreSession(), isNull);
+        verify(() => storage.clear()).called(1);
+      },
+    );
 
     test('profil rusak -> dibersihkan, null', () async {
       when(() => storage.readToken()).thenAnswer((_) async => '1|abc');
@@ -106,7 +142,9 @@ void main() {
 
     test('profil JSON valid tapi bentuk salah -> dibersihkan, null', () async {
       when(() => storage.readToken()).thenAnswer((_) async => '1|abc');
-      when(() => storage.readUser()).thenAnswer((_) async => jsonEncode({'id': 'bukan-angka'}));
+      when(
+        () => storage.readUser(),
+      ).thenAnswer((_) async => jsonEncode({'id': 'bukan-angka'}));
 
       expect(await repository.restoreSession(), isNull);
       verify(() => storage.clear()).called(1);
@@ -131,19 +169,25 @@ void main() {
       verify(() => storage.clear()).called(1);
     });
 
-    test('server menggantung: berhenti menunggu setelah timeout, sesi tetap dihapus', () async {
-      when(() => remote.logout()).thenAnswer((_) => Completer<void>().future);
+    test(
+      'server menggantung: berhenti menunggu setelah timeout, sesi tetap dihapus',
+      () async {
+        when(() => remote.logout()).thenAnswer((_) => Completer<void>().future);
 
-      await repository.logout();
+        await repository.logout();
+
+        verify(() => storage.clear()).called(1);
+      },
+    );
+  });
+
+  test(
+    'clearSession hanya menghapus sesi lokal, tanpa memanggil server',
+    () async {
+      await repository.clearSession();
 
       verify(() => storage.clear()).called(1);
-    });
-  });
-
-  test('clearSession hanya menghapus sesi lokal, tanpa memanggil server', () async {
-    await repository.clearSession();
-
-    verify(() => storage.clear()).called(1);
-    verifyZeroInteractions(remote);
-  });
+      verifyZeroInteractions(remote);
+    },
+  );
 }

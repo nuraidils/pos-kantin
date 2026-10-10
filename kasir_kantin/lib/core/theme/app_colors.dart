@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 abstract final class AppColors {
   // Brand
   static const primary = Color(0xFF0F4540); // Deep teal: navigasi, judul kuat
-  static const secondary = Color(0xFF287B72); // Teal: aksi utama, kontrol terpilih
-  static const accent = Color(0xFFF47C48); // Coral: peringatan, penekanan sekunder
+  static const secondary = Color(
+    0xFF287B72,
+  ); // Teal: aksi utama, kontrol terpilih
+  static const accent = Color(
+    0xFFF47C48,
+  ); // Coral: peringatan, penekanan sekunder
   static const primarySoft = Color(0xFFE3F0EE); // Latar kontrol terpilih
 
   // Permukaan
@@ -23,7 +27,9 @@ abstract final class AppColors {
   static const warning = accent; // stok menipis, perlu perhatian
   static const danger = Color(0xFFD64545); // gagal, destruktif
   static const info = Color(0xFF2B6CB0);
-  static const offline = Color(0xFF6B7471); // netral & tenang, bukan merah (DESIGN.md §33)
+  static const offline = Color(
+    0xFF6B7471,
+  ); // netral & tenang, bukan merah (DESIGN.md §33)
 
   // Latar lembut untuk banner pesan (selalu disertai ikon + teks, bukan warna saja).
   static const dangerSoft = Color(0xFFFDECEC);

@@ -11,7 +11,12 @@ import 'package:mocktail/mocktail.dart';
 class MockAuthBloc extends MockBloc<AuthEvent, AuthState> implements AuthBloc {}
 
 void main() {
-  const user = AuthUser(id: 1, name: 'Siti', email: 'siti@kantin.test', role: 'cashier');
+  const user = AuthUser(
+    id: 1,
+    name: 'Siti',
+    email: 'siti@kantin.test',
+    role: 'cashier',
+  );
   late MockAuthBloc bloc;
 
   setUpAll(() => registerFallbackValue(const AuthStarted()));
@@ -28,7 +33,10 @@ void main() {
       MaterialApp(
         theme: AppTheme.light,
         home: Scaffold(
-          body: BlocProvider<AuthBloc>.value(value: bloc, child: const SettingsPage()),
+          body: BlocProvider<AuthBloc>.value(
+            value: bloc,
+            child: const SettingsPage(),
+          ),
         ),
       ),
     );
@@ -37,7 +45,9 @@ void main() {
   Finder dialogButton(String label) =>
       find.descendant(of: find.byType(AlertDialog), matching: find.text(label));
 
-  testWidgets('menampilkan nama, email, dan peran dalam bahasa Indonesia', (tester) async {
+  testWidgets('menampilkan nama, email, dan peran dalam bahasa Indonesia', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     expect(find.text('Siti'), findsOneWidget);
@@ -45,7 +55,9 @@ void main() {
     expect(find.text('Kasir'), findsOneWidget);
   });
 
-  testWidgets('Keluar -> konfirmasi -> mengirim AuthLogoutRequested', (tester) async {
+  testWidgets('Keluar -> konfirmasi -> mengirim AuthLogoutRequested', (
+    tester,
+  ) async {
     await pumpPage(tester);
 
     await tester.tap(find.text('Keluar'));

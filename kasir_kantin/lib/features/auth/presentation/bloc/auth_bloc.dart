@@ -11,17 +11,17 @@ part 'auth_event.dart';
 part 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  AuthBloc({
-    required AuthRepository repository,
-    Stream<void>? sessionExpired,
-  })  : _repository = repository,
-        super(const AuthUnknown()) {
+  AuthBloc({required AuthRepository repository, Stream<void>? sessionExpired})
+    : _repository = repository,
+      super(const AuthUnknown()) {
     on<AuthStarted>(_onStarted);
     on<AuthLoginSubmitted>(_onLoginSubmitted);
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthSessionExpired>(_onSessionExpired);
 
-    _sessionExpiredSub = sessionExpired?.listen((_) => add(const AuthSessionExpired()));
+    _sessionExpiredSub = sessionExpired?.listen(
+      (_) => add(const AuthSessionExpired()),
+    );
   }
 
   final AuthRepository _repository;
@@ -30,7 +30,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onStarted(AuthStarted event, Emitter<AuthState> emit) async {
     try {
       final user = await _repository.restoreSession();
-      emit(user == null ? const AuthUnauthenticated() : AuthAuthenticated(user));
+      emit(
+        user == null ? const AuthUnauthenticated() : AuthAuthenticated(user),
+      );
     } catch (_) {
       // Penyimpanan aman tidak terbaca: minta masuk ulang, jangan macet di splash.
       emit(const AuthUnauthenticated());
@@ -52,7 +54,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } on ApiException catch (e) {
       emit(_failureFor(e));
     } catch (_) {
-      emit(const AuthFailure(message: 'Terjadi kesalahan yang tidak terduga. Coba lagi.'));
+      emit(
+        const AuthFailure(
+          message: 'Terjadi kesalahan yang tidak terduga. Coba lagi.',
+        ),
+      );
     }
   }
 
@@ -78,23 +84,32 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // API keluar. Transaksi di SQLite tidak disentuh.
       await _repository.clearSession();
     } catch (_) {}
-    emit(const AuthUnauthenticated(message: 'Sesi berakhir. Silakan masuk kembali.'));
+    emit(
+      const AuthUnauthenticated(
+        message: 'Sesi berakhir. Silakan masuk kembali.',
+      ),
+    );
   }
 
   AuthFailure _failureFor(ApiException e) {
     return switch (e) {
       NetworkException() => const AuthFailure(
-          message: 'Tidak dapat terhubung ke internet. '
-              'Masuk pertama kali membutuhkan koneksi internet.',
-        ),
-      UnauthorizedException() => const AuthFailure(message: 'Email atau kata sandi salah.'),
+        message:
+            'Tidak dapat terhubung ke internet. '
+            'Masuk pertama kali membutuhkan koneksi internet.',
+      ),
+      UnauthorizedException() => const AuthFailure(
+        message: 'Email atau kata sandi salah.',
+      ),
       ForbiddenException() => AuthFailure(message: e.message),
       ValidationException(:final errors) => AuthFailure(
-          message: 'Periksa kembali data yang Anda isi.',
-          fieldErrors: errors,
-        ),
+        message: 'Periksa kembali data yang Anda isi.',
+        fieldErrors: errors,
+      ),
       ServerException() => AuthFailure(message: e.message),
-      _ => const AuthFailure(message: 'Terjadi kesalahan yang tidak terduga. Coba lagi.'),
+      _ => const AuthFailure(
+        message: 'Terjadi kesalahan yang tidak terduga. Coba lagi.',
+      ),
     };
   }
 

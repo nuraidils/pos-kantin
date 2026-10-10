@@ -12,8 +12,8 @@ class AuthRepositoryImpl implements AuthRepository {
     required AuthRemoteDataSource remote,
     required SessionStorage storage,
     this.logoutTimeout = const Duration(seconds: 3),
-  })  : _remote = remote,
-        _storage = storage;
+  }) : _remote = remote,
+       _storage = storage;
 
   /// Server menghapus token lama dengan nama perangkat yang sama saat login
   /// ulang, jadi dua HP dengan akun yang sama akan saling mengeluarkan.
@@ -41,7 +41,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthUser> login({required String email, required String password}) async {
+  Future<AuthUser> login({
+    required String email,
+    required String password,
+  }) async {
     final result = await _remote.login(
       email: email.trim(),
       password: password,

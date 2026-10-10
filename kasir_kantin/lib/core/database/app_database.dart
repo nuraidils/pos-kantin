@@ -38,7 +38,11 @@ class AppDatabase {
     await batch.commit(noResult: true);
   }
 
-  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  static Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       final migration = _migrations[v];
       if (migration == null) {

@@ -16,7 +16,9 @@ class AuthGate extends StatelessWidget {
       builder: (context, state) => switch (state) {
         AuthUnknown() => const _LoadingPage(),
         AuthAuthenticated() => const AppShell(),
-        AuthUnauthenticated() || AuthInProgress() || AuthFailure() => const LoginPage(),
+        AuthUnauthenticated() ||
+        AuthInProgress() ||
+        AuthFailure() => const LoginPage(),
       },
     );
   }
@@ -27,8 +29,6 @@ class _LoadingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

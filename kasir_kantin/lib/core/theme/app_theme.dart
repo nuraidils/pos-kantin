@@ -10,32 +10,60 @@ abstract final class AppTheme {
   static const fontFamily = 'Inter';
 
   static ThemeData get light {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.secondary,
-      brightness: Brightness.light,
-    ).copyWith(
-      primary: AppColors.secondary,
-      onPrimary: Colors.white,
-      secondary: AppColors.primary,
-      onSecondary: Colors.white,
-      tertiary: AppColors.accent,
-      surface: AppColors.surface,
-      onSurface: AppColors.textPrimary,
-      error: AppColors.danger,
-      outline: AppColors.border,
-    );
+    final colorScheme =
+        ColorScheme.fromSeed(
+          seedColor: AppColors.secondary,
+          brightness: Brightness.light,
+        ).copyWith(
+          primary: AppColors.secondary,
+          onPrimary: Colors.white,
+          secondary: AppColors.primary,
+          onSecondary: Colors.white,
+          tertiary: AppColors.accent,
+          surface: AppColors.surface,
+          onSurface: AppColors.textPrimary,
+          error: AppColors.danger,
+          outline: AppColors.border,
+        );
 
     // Skala tipografi DESIGN.md §6: 28 / 24 / 20 / 18 / 14–16 / 12–13.
     const textTheme = TextTheme(
-      headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2, color: AppColors.textPrimary),
-      headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, height: 1.25, color: AppColors.textPrimary),
-      headlineSmall: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, height: 1.3, color: AppColors.textPrimary),
-      titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+      headlineLarge: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        color: AppColors.textPrimary,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w700,
+        height: 1.25,
+        color: AppColors.textPrimary,
+      ),
+      headlineSmall: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+        color: AppColors.textPrimary,
+      ),
+      titleLarge: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+      titleMedium: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
       bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimary),
       bodyMedium: TextStyle(fontSize: 14, color: AppColors.textPrimary),
       bodySmall: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+      labelLarge: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
     );
 
     final inputBorder = OutlineInputBorder(
@@ -69,7 +97,9 @@ abstract final class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(64, 48),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
@@ -78,14 +108,19 @@ abstract final class AppTheme {
           minimumSize: const Size(64, 48),
           foregroundColor: AppColors.textPrimary,
           side: const BorderSide(color: AppColors.border),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: 14,
+        ),
         border: inputBorder,
         enabledBorder: inputBorder,
         focusedBorder: inputBorder.copyWith(
@@ -114,10 +149,16 @@ abstract final class AppTheme {
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return IconThemeData(color: selected ? AppColors.primary : AppColors.textSecondary);
+          return IconThemeData(
+            color: selected ? AppColors.primary : AppColors.textSecondary,
+          );
         }),
       ),
-      dividerTheme: const DividerThemeData(color: AppColors.border, space: 1, thickness: 1),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.border,
+        space: 1,
+        thickness: 1,
+      ),
     );
   }
 }

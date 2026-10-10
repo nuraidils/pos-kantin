@@ -61,7 +61,9 @@ class SettingsPage extends StatelessWidget {
                         backgroundColor: AppColors.primarySoft,
                         child: Text(
                           user.name.isEmpty ? '?' : user.name[0].toUpperCase(),
-                          style: text.titleMedium?.copyWith(color: AppColors.primary),
+                          style: text.titleMedium?.copyWith(
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.lg),

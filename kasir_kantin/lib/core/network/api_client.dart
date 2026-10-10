@@ -33,7 +33,12 @@ class ApiClient {
     Map<String, String>? query,
     bool reportUnauthorized = true,
   }) {
-    return _send('GET', path, query: query, reportUnauthorized: reportUnauthorized);
+    return _send(
+      'GET',
+      path,
+      query: query,
+      reportUnauthorized: reportUnauthorized,
+    );
   }
 
   Future<Map<String, dynamic>> post(
@@ -41,7 +46,12 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool reportUnauthorized = true,
   }) {
-    return _send('POST', path, body: body, reportUnauthorized: reportUnauthorized);
+    return _send(
+      'POST',
+      path,
+      body: body,
+      reportUnauthorized: reportUnauthorized,
+    );
   }
 
   void close() {
@@ -70,7 +80,9 @@ class ApiClient {
       final streamed = await _http.send(request).timeout(timeout);
       response = await http.Response.fromStream(streamed).timeout(timeout);
     } on TimeoutException {
-      throw const NetworkException('Koneksi terlalu lama. Periksa internet Anda.');
+      throw const NetworkException(
+        'Koneksi terlalu lama. Periksa internet Anda.',
+      );
     } on SocketException {
       throw const NetworkException();
     } on http.ClientException {
@@ -95,11 +107,18 @@ class ApiClient {
         if (reportUnauthorized && !_unauthorizedController.isClosed) {
           _unauthorizedController.add(null);
         }
-        throw UnauthorizedException(serverMessage ?? 'Sesi berakhir. Silakan masuk kembali.');
+        throw UnauthorizedException(
+          serverMessage ?? 'Sesi berakhir. Silakan masuk kembali.',
+        );
       case 403:
-        throw ForbiddenException(serverMessage ?? 'Akun ini tidak memiliki akses.');
+        throw ForbiddenException(
+          serverMessage ?? 'Akun ini tidak memiliki akses.',
+        );
       case 409:
-        throw ConflictException(serverMessage ?? 'Data tidak dapat diterapkan.', body: json);
+        throw ConflictException(
+          serverMessage ?? 'Data tidak dapat diterapkan.',
+          body: json,
+        );
       case 422:
         throw ValidationException(
           serverMessage ?? 'Data tidak valid.',
@@ -107,7 +126,9 @@ class ApiClient {
         );
       default:
         if (status >= 500) throw const ServerException();
-        throw UnexpectedApiException(serverMessage ?? 'Terjadi kesalahan yang tidak terduga.');
+        throw UnexpectedApiException(
+          serverMessage ?? 'Terjadi kesalahan yang tidak terduga.',
+        );
     }
   }
 

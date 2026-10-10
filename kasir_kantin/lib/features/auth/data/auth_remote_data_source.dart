@@ -28,7 +28,9 @@ class AuthRemoteDataSource {
         user: AuthUser.fromJson(data['user'] as Map<String, dynamic>),
       );
     } on TypeError {
-      throw const UnexpectedApiException('Respons server tidak sesuai harapan.');
+      throw const UnexpectedApiException(
+        'Respons server tidak sesuai harapan.',
+      );
     }
   }
 

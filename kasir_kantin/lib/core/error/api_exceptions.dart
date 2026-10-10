@@ -27,9 +27,7 @@ final class UnauthorizedException extends ApiException {
 
 /// 403 — akun tidak berhak.
 final class ForbiddenException extends ApiException {
-  const ForbiddenException([
-    super.message = 'Akun ini tidak memiliki akses.',
-  ]);
+  const ForbiddenException([super.message = 'Akun ini tidak memiliki akses.']);
 }
 
 /// 422 — permintaan tidak valid. Jangan dicoba ulang terus-menerus.
