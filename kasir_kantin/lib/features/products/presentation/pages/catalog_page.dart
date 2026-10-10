@@ -4,6 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../cart/presentation/bloc/cart_bloc.dart';
+import '../../../cart/presentation/widgets/cart_bar.dart';
+import '../../../cart/presentation/widgets/cart_sheet.dart';
 import '../bloc/catalog_bloc.dart';
 import '../widgets/catalog_status_bar.dart';
 import '../widgets/category_chips.dart';
@@ -25,29 +28,47 @@ class CatalogPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<CatalogBloc, CatalogState>(
       builder: (context, state) {
-        return RefreshIndicator(
-          onRefresh: () => _refresh(context),
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.sm,
+        return BlocBuilder<CartBloc, CartState>(
+          builder: (context, cart) {
+            return Column(
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => _refresh(context),
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg,
+                            AppSpacing.lg,
+                            AppSpacing.lg,
+                            AppSpacing.sm,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: _Header(state: state),
+                          ),
+                        ),
+                        ..._body(context, state, cart),
+                      ],
+                    ),
+                  ),
                 ),
-                sliver: SliverToBoxAdapter(child: _Header(state: state)),
-              ),
-              ..._body(context, state),
-            ],
-          ),
+                if (!cart.isEmpty)
+                  CartBar(
+                    totalQuantity: cart.totalQuantity,
+                    totalAmount: cart.totalAmount,
+                    onTap: () => showCartSheet(context),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  List<Widget> _body(BuildContext context, CatalogState state) {
+  List<Widget> _body(BuildContext context, CatalogState state, CartState cart) {
     switch (state.status) {
       case CatalogStatus.loading:
         return [const _SkeletonGrid()];
@@ -128,10 +149,15 @@ class CatalogPage extends StatelessWidget {
                 crossAxisSpacing: AppSpacing.md,
                 mainAxisExtent: 128 + 88 * textScale,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => ProductCard(product: visible[index]),
-                childCount: visible.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final product = visible[index];
+                return ProductCard(
+                  product: product,
+                  quantityInCart: cart.quantityOf(product.id),
+                  onTap: () =>
+                      context.read<CartBloc>().add(CartProductAdded(product)),
+                );
+              }, childCount: visible.length),
             ),
           ),
         ];

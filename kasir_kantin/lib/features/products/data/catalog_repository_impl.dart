@@ -4,11 +4,7 @@ import 'catalog_local_data_source.dart';
 import 'catalog_remote_data_source.dart';
 
 class CatalogRepositoryImpl implements CatalogRepository {
-  CatalogRepositoryImpl({
-    required CatalogRemoteDataSource remote,
-    required CatalogLocalDataSource local,
-  }) : _remote = remote,
-       _local = local;
+  CatalogRepositoryImpl({required this._remote, required this._local});
 
   final CatalogRemoteDataSource _remote;
   final CatalogLocalDataSource _local;

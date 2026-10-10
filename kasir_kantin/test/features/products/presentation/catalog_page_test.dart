@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kasir_kantin/core/theme/app_theme.dart';
+import 'package:kasir_kantin/features/cart/domain/cart_item.dart';
+import 'package:kasir_kantin/features/cart/presentation/bloc/cart_bloc.dart';
+import 'package:kasir_kantin/features/cart/presentation/widgets/cart_bar.dart';
 import 'package:kasir_kantin/features/products/domain/product.dart';
 import 'package:kasir_kantin/features/products/domain/product_category.dart';
 import 'package:kasir_kantin/features/products/presentation/bloc/catalog_bloc.dart';
@@ -11,6 +14,8 @@ import 'package:mocktail/mocktail.dart';
 
 class MockCatalogBloc extends MockBloc<CatalogEvent, CatalogState>
     implements CatalogBloc {}
+
+class MockCartBloc extends MockBloc<CartEvent, CartState> implements CartBloc {}
 
 Product prod(
   int id,
@@ -43,19 +48,34 @@ void main() {
   );
 
   late MockCatalogBloc bloc;
+  late MockCartBloc cartBloc;
 
-  setUpAll(() => registerFallbackValue(const CatalogStarted()));
+  setUpAll(() {
+    registerFallbackValue(const CatalogStarted());
+    registerFallbackValue(const CartCleared());
+  });
 
-  setUp(() => bloc = MockCatalogBloc());
+  setUp(() {
+    bloc = MockCatalogBloc();
+    cartBloc = MockCartBloc();
+  });
 
-  Future<void> pumpPage(WidgetTester tester, CatalogState state) async {
+  Future<void> pumpPage(
+    WidgetTester tester,
+    CatalogState state, {
+    CartState cart = const CartState(),
+  }) async {
     whenListen(bloc, const Stream<CatalogState>.empty(), initialState: state);
+    whenListen(cartBloc, const Stream<CartState>.empty(), initialState: cart);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
         home: Scaffold(
-          body: BlocProvider<CatalogBloc>.value(
-            value: bloc,
+          body: MultiBlocProvider(
+            providers: [
+              BlocProvider<CatalogBloc>.value(value: bloc),
+              BlocProvider<CartBloc>.value(value: cartBloc),
+            ],
             child: const CatalogPage(),
           ),
         ),
@@ -236,4 +256,56 @@ void main() {
       verify(() => bloc.add(const CatalogStarted())).called(1);
     },
   );
+
+  group('keranjang', () {
+    testWidgets('mengetuk produk mengirim CartProductAdded', (tester) async {
+      final nasi = prod(1, 'Nasi Goreng', price: 15000);
+      await pumpPage(tester, ready(products: [nasi]));
+
+      await tester.tap(find.text('Nasi Goreng'));
+
+      verify(() => cartBloc.add(CartProductAdded(nasi))).called(1);
+    });
+
+    testWidgets('produk habis tidak mengirim apa pun saat diketuk', (
+      tester,
+    ) async {
+      await pumpPage(tester, ready(products: [prod(1, 'Batagor', stock: 0)]));
+
+      await tester.tap(find.text('Batagor'));
+
+      verifyNever(() => cartBloc.add(any()));
+    });
+
+    testWidgets('keranjang kosong -> tidak ada bar keranjang', (tester) async {
+      await pumpPage(tester, ready());
+
+      expect(find.byType(CartBar), findsNothing);
+    });
+
+    testWidgets('keranjang berisi -> bar ringkasan dan lencana pada kartu', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        ready(),
+        cart: const CartState(
+          items: [
+            CartItem(
+              productId: 1,
+              name: 'Nasi Goreng',
+              price: 15000,
+              quantity: 2,
+              availableStock: 10,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.byType(CartBar), findsOneWidget);
+      expect(find.text('2 item'), findsOneWidget);
+      expect(find.text('Rp30.000'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget); // lencana jumlah pada kartu
+    });
+  });
 }

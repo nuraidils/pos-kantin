@@ -24,7 +24,7 @@ void main() {
       'invoice_number': 'INV-$uuid',
       'total_amount': 20000,
       'payment_method': paymentMethod,
-      if (syncStatus != null) 'sync_status': syncStatus,
+      'sync_status': ?syncStatus,
       'created_at': '2026-10-08T10:00:00Z',
     });
   }

@@ -14,9 +14,7 @@ part 'catalog_state.dart';
 /// (DESIGN.md §39); sinkronisasi berjalan di belakang dan tidak pernah
 /// menghalangi kasir.
 class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
-  CatalogBloc({required CatalogRepository repository})
-    : _repository = repository,
-      super(const CatalogState()) {
+  CatalogBloc({required this._repository}) : super(const CatalogState()) {
     on<CatalogStarted>(_onStarted);
     on<CatalogRefreshed>((event, emit) => _sync(emit));
     on<CatalogSearchChanged>(

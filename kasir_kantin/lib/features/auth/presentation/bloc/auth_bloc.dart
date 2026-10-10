@@ -11,9 +11,8 @@ part 'auth_event.dart';
 part 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  AuthBloc({required AuthRepository repository, Stream<void>? sessionExpired})
-    : _repository = repository,
-      super(const AuthUnknown()) {
+  AuthBloc({required this._repository, Stream<void>? sessionExpired})
+    : super(const AuthUnknown()) {
     on<AuthStarted>(_onStarted);
     on<AuthLoginSubmitted>(_onLoginSubmitted);
     on<AuthLogoutRequested>(_onLogoutRequested);

@@ -9,11 +9,10 @@ import 'auth_remote_data_source.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl({
-    required AuthRemoteDataSource remote,
-    required SessionStorage storage,
+    required this._remote,
+    required this._storage,
     this.logoutTimeout = const Duration(seconds: 3),
-  }) : _remote = remote,
-       _storage = storage;
+  });
 
   /// Server menghapus token lama dengan nama perangkat yang sama saat login
   /// ulang, jadi dua HP dengan akun yang sama akan saling mengeluarkan.

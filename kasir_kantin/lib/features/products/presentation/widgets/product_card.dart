@@ -6,12 +6,19 @@ import '../../../../core/utils/currency_formatter.dart';
 import '../../domain/product.dart';
 
 /// Kartu produk: gambar, nama, harga, stok (DESIGN.md §14–15).
-/// [onTap] null = tidak dapat dipilih (mis. tahap sebelum keranjang ada).
+/// [onTap] null = tidak dapat dipilih. [quantityInCart] > 0 menampilkan
+/// lencana jumlah di keranjang.
 class ProductCard extends StatelessWidget {
-  const ProductCard({super.key, required this.product, this.onTap});
+  const ProductCard({
+    super.key,
+    required this.product,
+    this.onTap,
+    this.quantityInCart = 0,
+  });
 
   final Product product;
   final VoidCallback? onTap;
+  final int quantityInCart;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +35,21 @@ class ProductCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(height: 96, child: _ProductImage(url: product.imageUrl)),
+              SizedBox(
+                height: 96,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _ProductImage(url: product.imageUrl),
+                    if (quantityInCart > 0)
+                      Positioned(
+                        top: AppSpacing.sm,
+                        right: AppSpacing.sm,
+                        child: _CartBadge(quantity: quantityInCart),
+                      ),
+                  ],
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
@@ -54,6 +75,49 @@ class ProductCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lencana "di keranjang": ikon + angka, tidak hanya warna.
+class _CartBadge extends StatelessWidget {
+  const _CartBadge({required this.quantity});
+
+  final int quantity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Di keranjang: $quantity',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.shopping_basket_outlined,
+              size: 14,
+              color: Colors.white,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              '$quantity',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );
