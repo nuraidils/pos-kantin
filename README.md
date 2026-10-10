@@ -1,9 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–8** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–9** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
-skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull).
+skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
+keranjang).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -497,6 +498,67 @@ dijalankan, lalu `.\run_dev.cmd`.
   kursor lama di HP tidak cocok dengan database baru. Hapus data aplikasi
   (Setelan Android → Aplikasi → Kasir Kantin → Penyimpanan → Hapus data) lalu masuk lagi.
 
+### 8. Tahap 9 — Keranjang
+
+Tidak ada paket baru, tidak ada perubahan backend, skema SQLite/MySQL, maupun
+kontrak API. Salin ulang folder `mobile/` ke `kasir_kantin` (timpa file yang sama).
+
+**Sekaligus merapikan 9 info `flutter analyze`:** konstruktor memakai
+*private named parameter* (`required this._repository`), `'sync_status': ?syncStatus`
+pada tes database, dan dua import yang tidak perlu dihapus. Tidak ada perubahan
+perilaku. Setelah ini `flutter analyze` seharusnya bersih.
+
+**File baru:** seluruh `lib/features/cart/` (`domain/cart_item.dart`,
+`presentation/bloc/`, `presentation/widgets/` berisi `QuantityControl`, `CartBar`,
+`CartSheet`) dan tesnya di `test/features/cart/`.
+
+**File berubah (timpa):** `lib/app/app_shell.dart` (menyediakan `CartBloc` dan
+menghubungkan katalog → keranjang), `lib/features/products/presentation/pages/catalog_page.dart`
+(ketuk produk, bar keranjang), `lib/features/products/presentation/widgets/product_card.dart`
+(lencana jumlah), `test/features/products/presentation/catalog_page_test.dart`, serta
+file lint: `auth_repository_impl.dart`, `auth_bloc.dart`, `login_page.dart`,
+`catalog_repository_impl.dart`, `catalog_bloc.dart`, `app_database_test.dart`,
+`api_client_unauthorized_test.dart`.
+
+**Perilaku yang dibangun (AGENTS.md §19, DESIGN.md §16):**
+- **Ketuk produk = tambah satu.** Produk yang sama menambah jumlah, bukan baris baru.
+  Kartu menampilkan lencana jumlah di keranjang (ikon + angka).
+- **Batas stok.** Jumlah tidak pernah melebihi stok lokal. Di katalog, ketukan yang
+  melewati batas menampilkan pesan "Stok X hanya N."; di daftar keranjang tombol **+**
+  nonaktif dengan keterangan "Mencapai batas stok (N)". Produk habis/nonaktif tidak
+  bisa ditambahkan.
+- **Bar keranjang** di bawah katalog (jumlah item + total) hanya muncul bila keranjang
+  berisi; mengetuknya membuka daftar item: nama, harga satuan, `[-] n [+]`, subtotal,
+  hapus per baris, total, dan Kosongkan (dengan konfirmasi). Jumlah diubah tanpa pindah halaman.
+- **Jumlah tidak pernah 0:** `-` pada jumlah 1 menghapus baris.
+- **Selaras dengan katalog.** Saat sinkronisasi mengubah katalog, isi keranjang
+  disamakan: harga baru dipakai, jumlah dipotong ke stok baru, produk yang habis/nonaktif/
+  terhapus dikeluarkan. Setiap penyesuaian diberitahukan lewat snackbar, tidak diam-diam.
+- Keranjang hanya di memori selama sesi masuk (hilang bila aplikasi ditutup atau keluar).
+  Belum ada tombol bayar; itu tahap 10.
+
+**Catatan untuk tahap 10 (transaksi lokal):** harga, nama, dan stok di keranjang adalah
+tampilan. Saat membuat transaksi, baca ulang produk dari SQLite **di dalam transaksi
+database yang sama** dengan penulisan transaksi, validasi jumlah ≤ stok lokal saat itu,
+lalu simpan snapshot nama/harga ke `transaction_items`. Keranjang dikosongkan hanya
+setelah transaksi lokal berhasil tersimpan.
+
+**Verifikasi otomatis:**
+```powershell
+cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutter test
+```
+
+**Verifikasi manual di HP** (server berjalan, seeder sudah dijalankan, `.\run_dev.cmd`):
+1. Ketuk **Nasi Goreng** → bar "Keranjang · 1 item · Rp15.000" muncul, kartu berlencana 1. Ketuk lagi → 2 item, Rp30.000.
+2. Ketuk **Batagor** (habis) → tidak terjadi apa-apa. Ketuk **Kopi Susu** 4 kali (stok 3) → jumlah berhenti di 3 dan muncul "Stok Kopi Susu hanya 3."
+3. Ketuk bar keranjang → daftar item. Tekan **+** pada Kopi Susu di batasnya → nonaktif, tampil "Mencapai batas stok (3)". Tekan **-** sampai 1, lalu sekali lagi → baris hilang.
+4. Ikon tempat sampah menghapus satu baris; **Kosongkan** → konfirmasi → keranjang kosong ("Keranjang masih kosong"), bar hilang.
+5. **Keranjang vs sinkronisasi.** Isi keranjang dengan 3 Es Teh Manis. Di `php artisan tinker`:
+   `App\Models\Product::where('name','Es Teh Manis')->first()->update(['price'=>6000,'stock'=>2]);`
+   Tarik layar katalog ke bawah → snackbar menyebut harga baru dan jumlah disesuaikan ke 2; total mengikuti Rp6.000.
+6. Isi keranjang dengan Pisang Goreng, lalu `...where('name','Pisang Goreng')->first()->delete();` dan tarik layar → barisnya dikeluarkan dengan pemberitahuan.
+7. Pindah ke tab Pengaturan lalu kembali → isi keranjang dan filter pencarian tetap.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -511,14 +573,16 @@ dijalankan, lalu `.\run_dev.cmd`.
   `AuthGate` yang memilih layar berdasarkan status sesi.
 - `app/settings_page.dart`: kartu akun dan tombol Keluar (dengan konfirmasi).
 - `app/app_shell.dart`: navigasi bawah Kasir · Riwayat · Pengaturan; tab Kasir
-  berisi katalog, tab Riwayat masih keadaan kosong.
+  berisi katalog + keranjang, tab Riwayat masih keadaan kosong.
 - `features/products/`: `CatalogBloc` (muat lokal → sinkronisasi di belakang,
   cari, filter kategori), `CatalogRepository`, remote data source (`/api/catalog`)
   dan local data source (upsert atomik, kursor, proyeksi stok), `CatalogPage`,
   `ProductCard`, chip kategori, dan status sinkronisasi.
 
-Folder `features/cart`, `features/transactions`, `features/sync` dibuat saat
-dikerjakan.
+- `features/cart/`: `CartBloc` (tambah, ubah jumlah, hapus, kosongkan, selaraskan
+  dengan katalog), `CartBar`, `CartSheet`, `QuantityControl`.
+
+Folder `features/transactions` dan `features/sync` dibuat saat dikerjakan.
 
 ---
 
@@ -630,7 +694,7 @@ git push
 
 ## Tahap berikutnya (AGENTS.md §30)
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
-9. Keranjang → 10. Transaksi lokal → 11. API transaksi (`local_uuid` idempoten,
+9. Keranjang ✔ → 10. Transaksi lokal → 11. API transaksi (`local_uuid` idempoten,
 `DB::transaction`, `lockForUpdate`, respons 409 untuk stok kurang) →
 12–15. Offline, sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
 
