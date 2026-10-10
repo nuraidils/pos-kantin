@@ -1,10 +1,11 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–6** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–8** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
-skema SQLite lokal). Tahap berikutnya sengaja belum dibuat; stabilkan tiap
-lapisan sebelum menambah lapisan baru.
+skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull).
+Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
+lapisan baru.
 
 > **Status verifikasi.** Backend: seluruh langkah setup selesai dan 13 tes lulus
 > (sudah dijalankan di komputer pengembang). Mobile: project Flutter sudah
@@ -388,6 +389,114 @@ aktif (bagian B.4), akun kasir **dan** owner sudah dibuat (bagian A.7).
 Jalur "sesi berakhir" belum bisa diuji manual karena belum ada fitur yang memakai
 token selain login; jalur itu diuji lewat tes otomatis dan baru terlihat nyata di tahap 8.
 
+### 7. Tahap 8 — Katalog produk + sinkronisasi pull
+
+Tidak ada paket baru, tidak ada migrasi (skema SQLite v1 dan skema MySQL sudah
+cukup), dan tidak ada perubahan kontrak API. Salin ulang folder `backend/` dan
+`mobile/` dari paket ke `backend` dan `kasir_kantin` (timpa file yang sama).
+
+**Backend (baru):** `database/seeders/CatalogSeeder.php` dan
+`tests/Feature/CatalogSeederTest.php`.
+
+**Mobile — file baru:** seluruh `lib/features/products/`
+(`domain/`, `data/`, `presentation/bloc|pages|widgets/`) dan tesnya di
+`test/features/products/`.
+
+**Mobile — file berubah (timpa):** `lib/main.dart` (merangkai
+`CatalogRepositoryImpl`), `lib/app/app.dart` (menyediakan `CatalogRepository`),
+`lib/app/app_shell.dart` (tab Kasir = `CatalogPage`, membuat `CatalogBloc`),
+`lib/core/widgets/empty_state.dart` (parameter opsional `action`),
+`test/app/auth_gate_test.dart` (menyediakan `CatalogRepository` palsu).
+
+**Data uji.** Katalog masih kosong, dan Filament resource baru dibuat di tahap 16,
+jadi isi lewat seeder (sengaja **tidak** masuk `DatabaseSeeder`):
+```powershell
+cd C:\DIL\pos-kantin\backend
+php artisan db:seed --class=CatalogSeeder
+```
+Aman dijalankan berulang (tidak menduplikasi, tidak mengembalikan stok yang sudah
+berubah). Isinya 3 kategori dan 12 produk (10 tampil di kasir), termasuk: stok menipis (Ayam Geprek 4,
+Kopi Susu 3), stok habis (Batagor), satu produk **nonaktif** (Es Campur) dan satu
+produk **terhapus** (Produk Dihapus (uji)).
+
+**Perilaku yang dibangun:**
+- **Lokal dulu.** Membuka tab Kasir langsung menampilkan isi SQLite; sinkronisasi
+  berjalan di belakang (DESIGN.md §39). Tanpa internet, katalog tetap tampil
+  dengan status "Offline · Data lokal digunakan" — bukan pesan galat.
+- **Tarik inkremental.** Sinkronisasi pertama penuh (tanpa `updated_since`);
+  berikutnya memakai `meta.server_time` terakhir (disimpan di
+  `sync_metadata.products_last_sync`, apa adanya tanpa di-parse). Satu kursor untuk
+  kategori dan produk karena keduanya datang dalam satu respons.
+- **Atomik.** Upsert, penghapusan, dan kursor ditulis dalam satu transaksi SQLite.
+  Jika satu baris gagal, semuanya batal dan kursor tidak maju, sehingga perubahan
+  tidak pernah terlewat.
+- **Penghapusan.** Data dengan `deleted_at` terisi dihapus dari SQLite.
+  Sinkronisasi **penuh** membuang semua data lokal yang tidak ada di respons.
+  Riwayat transaksi tetap aman karena `transaction_items` menyimpan snapshot.
+- **Hanya produk aktif** yang tampil. Produk habis tampil redup dengan ikon +
+  teks "Habis" dan tidak bisa dipilih; stok ≤ 5 menampilkan "Stok tersisa N".
+- **Cari + kategori.** Pencarian nama (tidak peka huruf besar/kecil) dan chip
+  kategori bekerja di data lokal. Kategori tanpa produk aktif tidak ditampilkan.
+- **401 kini nyata.** Token yang dicabut membuat `AuthBloc` mengakhiri sesi
+  (pesan "Sesi berakhir. Silakan masuk kembali."); katalog tidak menampilkan
+  galat ganda.
+
+**⚠ Perubahan aturan stok (AGENTS.md Rule 10).** Stok di SQLite adalah *proyeksi*.
+Saat menarik katalog, stok produk disimpan sebagai **stok server dikurangi penjualan
+lokal yang belum diterima server** (transaksi `pending`, `syncing`, `failed`).
+Transaksi `conflict` tidak dihitung (server menolaknya), dan `synced` tidak dihitung
+(server sudah mengurangi). Tanpa ini, menarik katalog akan "mengembalikan" stok
+barang yang sudah terjual offline. Saat ini belum ada transaksi, jadi efeknya baru
+terlihat di tahap 10–13; logikanya sudah diuji.
+
+**Catatan untuk tahap berikutnya:**
+- **Tahap 11 (API transaksi):** kurangi stok dengan Eloquent (`$product->decrement('stock', $qty)`)
+  atau `save()`, **bukan** `DB::table('products')->decrement(...)`. Hanya jalur
+  Eloquent yang menaikkan `updated_at`, dan sinkronisasi inkremental bergantung
+  padanya agar perubahan stok sampai ke perangkat.
+- **Tahap 13:** sinkronisasi saat ini hanya berjalan ketika tab Kasir dibuka dan
+  saat ditarik manual. Pemicu otomatis (koneksi kembali, berkala) dan `SyncBloc`
+  menyusul di tahap 13.
+- Produk belum bisa diketuk (keranjang = tahap 9); `ProductCard` sudah menerima `onTap`.
+
+**Verifikasi otomatis:**
+```powershell
+cd C:\DIL\pos-kantin\backend;     php artisan test      # sebelumnya 13 tes; kini 17
+cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutter test
+```
+
+**Verifikasi manual di HP.** Siapkan: `php artisan serve` berjalan, seeder sudah
+dijalankan, lalu `.\run_dev.cmd`.
+1. Masuk sebagai kasir → kerangka abu-abu sebentar, "Menyinkronkan...", lalu grid
+   **10 produk**. Chip: Semua · Camilan · Makanan · Minuman.
+2. Ayam Geprek "Stok tersisa 4", Kopi Susu "Stok tersisa 3", Batagor "Habis"
+   (redup). **Tidak ada** Es Campur dan Produk Dihapus (uji).
+3. Cari `kopi` → hanya Kopi Susu. Hapus pencarian (ikon ✕). Pilih chip Minuman →
+   4 produk. Cari `zzz` → "Produk tidak ditemukan".
+4. **Offline:** hentikan `php artisan serve`, tutup aplikasi sepenuhnya, buka lagi →
+   produk langsung tampil dan status "Offline · Data lokal digunakan". Tarik layar
+   ke bawah → tetap offline, produk tidak hilang.
+5. **Inkremental:** di `php artisan tinker`:
+   ```php
+   use App\Models\Product;
+   Product::where('name', 'Es Teh Manis')->first()->update(['price' => 6000, 'stock' => 2]);
+   Product::where('name', 'Pisang Goreng')->first()->delete();
+   ```
+   Nyalakan server, tarik layar ke bawah → Es Teh Manis "Rp6.000" dan "Stok tersisa 2",
+   Pisang Goreng hilang, status "Online · Diperbarui HH:mm".
+6. **Sesi berakhir:** di tinker jalankan
+   `\Illuminate\Support\Facades\DB::table('personal_access_tokens')->delete();`
+   lalu tarik layar → kembali ke halaman masuk dengan "Sesi berakhir. Silakan masuk kembali."
+   Masuk lagi → produk langsung tampil (data lokal tidak dihapus).
+
+**Batasan yang disengaja:**
+- Gambar produk dimuat dari jaringan tanpa cache disk; saat offline tampil ikon
+  pengganti. Upload gambar baru ada di Filament (tahap 16); `image_url` memakai
+  `APP_URL`, jadi di HP via `adb reverse` pastikan `APP_URL=http://127.0.0.1:8000`.
+- Jika kamu menjalankan `php artisan migrate:fresh` saat sudah pernah menarik katalog,
+  kursor lama di HP tidak cocok dengan database baru. Hapus data aplikasi
+  (Setelan Android → Aplikasi → Kasir Kantin → Penyimpanan → Hapus data) lalu masuk lagi.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -401,10 +510,15 @@ token selain login; jalur itu diuji lewat tes otomatis dan baru terlihat nyata d
   `AuthRepository` + remote data source, halaman masuk berbahasa Indonesia, dan
   `AuthGate` yang memilih layar berdasarkan status sesi.
 - `app/settings_page.dart`: kartu akun dan tombol Keluar (dengan konfirmasi).
-- `app/app_shell.dart`: navigasi bawah Kasir · Riwayat · Pengaturan, dengan
-  keadaan kosong berbahasa Indonesia.
+- `app/app_shell.dart`: navigasi bawah Kasir · Riwayat · Pengaturan; tab Kasir
+  berisi katalog, tab Riwayat masih keadaan kosong.
+- `features/products/`: `CatalogBloc` (muat lokal → sinkronisasi di belakang,
+  cari, filter kategori), `CatalogRepository`, remote data source (`/api/catalog`)
+  dan local data source (upsert atomik, kursor, proyeksi stok), `CatalogPage`,
+  `ProductCard`, chip kategori, dan status sinkronisasi.
 
-Folder `features/*` belum dibuat; tiap fitur membuatnya saat dikerjakan.
+Folder `features/cart`, `features/transactions`, `features/sync` dibuat saat
+dikerjakan.
 
 ---
 
@@ -515,8 +629,7 @@ git push
 5. **Skema server `unsignedInteger` untuk stok**: database juga menolak stok negatif.
 
 ## Tahap berikutnya (AGENTS.md §30)
-7. Autentikasi Flutter (`AuthBloc`, token, sesi offline) →
-8. Katalog produk + sinkronisasi pull dari `/api/catalog` →
+7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
 9. Keranjang → 10. Transaksi lokal → 11. API transaksi (`local_uuid` idempoten,
 `DB::transaction`, `lockForUpdate`, respons 409 untuk stok kurang) →
 12–15. Offline, sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
