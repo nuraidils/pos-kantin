@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–11** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–12** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -187,6 +187,8 @@ tahap 1–6. Yang baru: `TransactionController`, `StoreTransactionRequest`,
 
 **Salin overlay** seperti biasa (folder `backend/` di paket ke `backend\`). Satu
 file yang sudah ada ikut berubah: `routes/api.php` (menambah rute transaksi).
+Satu file baru di luar `app/`: `coba-transaksi.ps1` (skrip uji manual, lihat di bawah;
+file ini ada di paket Tahap 12, salin ke `backend\`).
 Setelah itu jalankan `php artisan test`.
 
 **Permintaan** (`POST /api/transactions`, header `Authorization: Bearer <token>`):
@@ -223,24 +225,30 @@ sync_status, created_at, synced_at, items: [...] }, "meta": { "duplicate": false
    `decrement` sehingga `updated_at` berubah dan sinkronisasi inkremental katalog
    membawa stok baru ke perangkat.
 
-**Tes manual** (PowerShell; ganti `TOKEN` dengan token dari login kasir dan pastikan `product_id` ada):
-```powershell
-$body = @{
-  local_uuid     = "c0a8b2e4-5d3f-4f6a-9c1e-2b7d8e9f0a1b"
-  payment_method = "cash"
-  total_amount   = 20000
-  created_at     = "2026-10-11T08:30:00Z"
-  items          = @(@{ product_id = 1; quantity = 2; price = 10000; subtotal = 20000 })
-} | ConvertTo-Json -Depth 5
+**Uji manual (2 menit, tanpa mengetik JSON).** Pakai skrip `backend/coba-transaksi.ps1`
+yang ikut di paket (sudah ada di folder `backend\` setelah overlay disalin).
 
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/transactions `
-  -Headers @{ Authorization = "Bearer TOKEN"; Accept = "application/json" } `
-  -ContentType "application/json" -Body $body
-```
-Kirim dua kali: pertama 201, kedua 200 dan stok hanya berkurang sekali.
+1. Terminal 1, di folder `backend\`: jalankan server.
+   ```powershell
+   php artisan serve
+   ```
+2. Terminal 2, di folder `backend\`: jalankan skrip dengan akun **kasir** yang
+   kamu buat lewat tinker (bukan akun owner).
+   ```powershell
+   .\coba-transaksi.ps1 -Email EMAIL_KASIR -Password KATA_SANDI
+   ```
+   Bila PowerShell menolak menjalankan skrip, jalankan sekali:
+   `Set-ExecutionPolicy -Scope Process Bypass`, lalu ulangi perintah di atas.
+3. Hasil yang benar: semua baris berawalan `[LULUS]` hijau dan akhirnya
+   `Semua pemeriksaan LULUS`. Skrip memeriksa tiga hal: transaksi baru (201),
+   kiriman yang sama dua kali (200, stok tidak berkurang lagi), dan jumlah melebihi
+   stok (409, tidak ada yang tersimpan).
+4. Bila ada `[GAGAL]`, salin seluruh keluaran terminal ke chat.
 
-Aplikasi Flutter **belum** memanggil endpoint ini (itu Tahap 12–13); tahap ini
-hanya backend.
+Skrip mengurangi stok satu produk sebanyak 1 dan menambah 1 transaksi di database
+pengembangan. Aman; stok bisa dikembalikan dengan perintah yang dicetak di akhir skrip.
+
+Tahap 11 hanya backend. Sisi Flutter untuk memanggil endpoint ini ada di Tahap 12.
 
 ---
 
@@ -690,6 +698,55 @@ cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutte
 6. **Offline.** Matikan server (atau mode pesawat), bayar satu produk dengan **QRIS** → tetap berhasil dan stok berkurang.
 7. **Stok habis.** Tambahkan Kopi Susu (stok 3) sebanyak 3 dan bayar → stok menjadi 0 dan kartu menampilkan "Habis".
 
+### 10. Tahap 12 — Kirim transaksi dan status sinkronisasi (lapisan data)
+
+Tahap ini **belum mengubah tampilan** dan **belum mengirim apa pun otomatis**.
+Isinya fondasi yang dipakai mesin sinkronisasi di Tahap 13: cara membaca transaksi
+lokal, cara memindahkan statusnya dengan aman, dan cara mengirim satu transaksi ke
+`POST /api/transactions`.
+
+**Salin overlay:** folder `mobile/` di paket ke `kasir_kantin\` (timpa file yang sama).
+File baru: `sync_outcome.dart`, `transaction_remote_data_source.dart`, dan tiga file
+tes. File lama yang berubah: `local_transaction.dart`, `transaction_repository.dart`,
+`transaction_local_data_source.dart`, `transaction_repository_impl.dart`, `main.dart`.
+
+**Tes otomatis** (di `kasir_kantin\`):
+```powershell
+dart format lib test; flutter analyze; flutter test
+```
+
+**Yang ditambahkan**
+- `TransactionRemoteDataSource.submit`: memanggil `POST /api/transactions`; 201 dan
+  200 sama-sama berarti "sudah ada di server".
+- `TransactionLocalDataSource`: baca transaksi, hitung yang belum tersinkron, dan
+  pindah status `pending → syncing → synced / failed / conflict`. Setiap perpindahan
+  dijaga di SQL sehingga dua pemanggil yang berbarengan tidak bisa mengirim transaksi
+  yang sama (Rule 5). Tidak ada fungsi yang menghapus transaksi (Rule 6).
+- `TransactionRepository.syncTransaction(uuid)`: mengirim satu transaksi dan mencatat
+  hasilnya. Pemetaan galat mengikuti AGENTS.md §17:
+
+  | Jawaban server | Status lokal | Keterangan |
+  |---|---|---|
+  | 201 / 200 | `synced` | `server_id` dan nomor invoice server disimpan |
+  | tanpa internet, timeout, 5xx | `failed` | Pesan tersimpan; boleh dicoba lagi |
+  | 409 stok kurang | `conflict` | Pesan: "Transaksi tidak dapat disinkronkan karena stok di server tidak mencukupi." + rincian produk. Stok lokal dikembalikan |
+  | 422 | `conflict` | Tidak dicoba ulang terus-menerus |
+  | 401 / 403 | `pending` | Bukan salah transaksi; pengirim diberi tahu `sessionExpired` |
+
+- `recoverInterruptedSyncs()`: transaksi yang tertinggal `syncing` (aplikasi tertutup
+  saat mengirim) dikembalikan ke `pending`. Dipanggil saat aplikasi mulai di Tahap 13.
+
+**Uji manual.** Karena belum ada yang memicu pengiriman dan tab Riwayat masih kosong,
+yang diuji manual hanyalah bahwa **tidak ada yang rusak** dan data bertahan:
+1. `.\run_dev.cmd`, masuk, bayar satu produk (stok berkurang).
+2. Tutup aplikasi sepenuhnya (geser dari daftar aplikasi), buka lagi.
+3. Stok produk itu tetap berkurang, dan kasir/keranjang/pembayaran tetap berjalan
+   seperti Tahap 10.
+
+Bukti bahwa transaksi sendiri bertahan setelah aplikasi ditutup ada di tes otomatis
+(`transaction_sync_status_test.dart`, grup *bertahan setelah aplikasi ditutup*), yang
+memakai file database sungguhan lalu membukanya kembali.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -716,7 +773,10 @@ cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutte
   source (satu transaksi SQLite: validasi ulang, tulis transaksi + item + stok),
   dan sheet pembayaran (Tunai/QRIS, status berhasil disimpan).
 
-Folder `features/sync` dibuat saat dikerjakan.
+- Tahap 12: `TransactionRemoteDataSource`, perpindahan status sinkronisasi di SQLite,
+  dan `syncTransaction` di repository (belum dipanggil dari mana pun).
+
+Folder `features/sync` dibuat di Tahap 13.
 
 ---
 
@@ -812,6 +872,26 @@ git commit -m "docs: panduan tahap 7 dan push ke GitHub"
 git push
 ```
 
+### Pesan commit per tahap
+Format: `jenis(lingkup): ringkasan singkat`, huruf kecil, bahasa Indonesia, tanpa titik
+di akhir. Jenis: `feat` (fitur), `fix` (perbaikan bug), `docs` (dokumentasi), `test`, `refactor`.
+Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
+
+| Tahap | Pesan commit |
+|---|---|
+| 10 | `feat(mobile): transaksi lokal dan pembayaran` (sudah dipakai) |
+| 11 | `feat(backend): api transaksi idempoten dengan validasi stok` |
+| 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` |
+
+Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
+```powershell
+git status
+git add -A
+git commit -m "feat(backend): api transaksi idempoten dengan validasi stok"
+git push
+```
+Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
+
 ---
 
 ## Keputusan yang perlu kamu ketahui
@@ -827,7 +907,7 @@ git push
 5. **Skema server `unsignedInteger` untuk stok**: database juga menolak stok negatif.
 6. **Nomor invoice yang bertabrakan** diberi akhiran `-2`, `-3`, … oleh server
    (transaksi sah tidak pernah ditolak karena nomor). Perangkat membaca
-   `invoice_number` dari respons dan memperbarui nomor lokalnya di Tahap 13.
+   `invoice_number` dari respons dan memperbarui nomor lokalnya (Tahap 12).
 7. **Harga dari perangkat diterima sebagai snapshot saat penjualan**, setelah
    dicek konsisten (subtotal = harga × jumlah, total = jumlah subtotal). Server
    tidak menolak bila harga produk di server sudah berubah, karena pelanggan
@@ -835,11 +915,19 @@ git push
 8. **Produk nonaktif atau terhapus sejak sinkronisasi terakhir tetap diterima**
    selama stoknya cukup, karena barangnya memang sudah terjual. Hanya `product_id`
    yang sama sekali tidak ada yang ditolak (422).
+9. **422 dari server menjadi `conflict`, bukan `failed`.** `failed` berarti "coba lagi
+   nanti"; kiriman yang tidak valid akan ditolak lagi, jadi ia harus terlihat
+   sebagai "perlu perhatian" dan tidak diulang otomatis.
+10. **Stok lokal dikembalikan saat `conflict`.** Aturan proyeksi stok tidak
+    mengurangkan `conflict`, dan stok server tidak berubah karena penolakan,
+    sehingga pull katalog tidak akan mengoreksinya sendiri.
+11. **Nomor invoice server menggantikan nomor lokal** setelah `synced` (bisa berakhiran `-2`).
 
 ## Tahap berikutnya (AGENTS.md §30)
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
-9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ →
-12–15. Offline, sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
+9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
+(lapisan data) ✔ →
+13–15. Sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
 
 Catatan untuk tahap sync: saat aplikasi mulai, transaksi berstatus `syncing`
 yang tertinggal (aplikasi tertutup mendadak) harus dikembalikan ke `pending`;
