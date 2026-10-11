@@ -12,6 +12,7 @@ import 'features/products/data/catalog_local_data_source.dart';
 import 'features/products/data/catalog_remote_data_source.dart';
 import 'features/products/data/catalog_repository_impl.dart';
 import 'features/transactions/data/transaction_local_data_source.dart';
+import 'features/transactions/data/transaction_remote_data_source.dart';
 import 'features/transactions/data/transaction_repository_impl.dart';
 
 /// Composition root: semua dependensi dirangkai di sini, satu kali.
@@ -40,6 +41,7 @@ Future<void> main() async {
 
   final transactionRepository = TransactionRepositoryImpl(
     local: TransactionLocalDataSource(database),
+    remote: TransactionRemoteDataSource(apiClient),
   );
 
   runApp(

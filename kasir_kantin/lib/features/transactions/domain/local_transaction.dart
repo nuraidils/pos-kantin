@@ -15,6 +15,9 @@ class LocalTransaction extends Equatable {
     required this.syncStatus,
     required this.createdAt,
     required this.items,
+    this.syncMessage,
+    this.serverId,
+    this.syncedAt,
   });
 
   final String localUuid;
@@ -25,6 +28,15 @@ class LocalTransaction extends Equatable {
   final DateTime createdAt;
   final List<LocalTransactionItem> items;
 
+  /// Alasan untuk status `failed` atau `conflict`, dalam bahasa kasir
+  /// (DESIGN.md §20). Kosong untuk status lain.
+  final String? syncMessage;
+
+  /// `transactions.id` di server; terisi setelah `synced`.
+  final int? serverId;
+
+  final DateTime? syncedAt;
+
   @override
   List<Object?> get props => [
     localUuid,
@@ -34,6 +46,9 @@ class LocalTransaction extends Equatable {
     syncStatus,
     createdAt,
     items,
+    syncMessage,
+    serverId,
+    syncedAt,
   ];
 }
 

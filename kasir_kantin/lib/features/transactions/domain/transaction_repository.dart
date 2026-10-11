@@ -1,6 +1,7 @@
 import 'checkout_line.dart';
 import 'local_transaction.dart';
 import 'payment_method.dart';
+import 'sync_outcome.dart';
 
 abstract interface class TransactionRepository {
   /// Menyimpan transaksi di perangkat dengan status `pending` dan
@@ -13,4 +14,27 @@ abstract interface class TransactionRepository {
     required List<CheckoutLine> lines,
     required PaymentMethod paymentMethod,
   });
+
+  Future<LocalTransaction?> getTransaction(String localUuid);
+
+  /// Transaksi yang boleh dikirim sekarang (`pending` dan `failed`), dari
+  /// yang terlama.
+  Future<List<LocalTransaction>> getTransactionsToSync();
+
+  /// Transaksi yang belum diterima server: `pending`, `syncing`, `failed`.
+  Future<int> countUnsyncedTransactions();
+
+  /// Transaksi `conflict` yang menunggu perhatian kasir.
+  Future<int> countConflictTransactions();
+
+  /// Mengirim satu transaksi dan mencatat hasilnya di SQLite. Aman dipanggil
+  /// berulang atau bersamaan: hanya satu pemanggil yang benar-benar
+  /// mengirim, dan server idempoten lewat `local_uuid` (Rule 5).
+  ///
+  /// Tidak pernah menghapus transaksi (Rule 6).
+  Future<SyncOutcome> syncTransaction(String localUuid);
+
+  /// Mengembalikan transaksi `syncing` yang tertinggal (aplikasi tertutup
+  /// saat mengirim) ke `pending`. Mengembalikan jumlahnya.
+  Future<int> recoverInterruptedSyncs();
 }

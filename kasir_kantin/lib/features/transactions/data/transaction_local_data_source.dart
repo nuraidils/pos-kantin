@@ -155,6 +155,228 @@ class TransactionLocalDataSource {
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Pembacaan dan perpindahan status sinkronisasi (Tahap 12).
+  //
+  // Setiap perpindahan status dijaga di SQL (`WHERE sync_status IN (...)`)
+  // sehingga dua pemanggil yang berbarengan tidak bisa sama-sama "mengambil"
+  // transaksi yang sama. Tidak ada fungsi di sini yang menghapus transaksi
+  // (AGENTS.md Rule 6). Stok lokal mengikuti aturan proyeksi di
+  // CatalogLocalDataSource: `pending`, `syncing`, `failed` dikurangkan;
+  // `synced` dan `conflict` tidak.
+  // ---------------------------------------------------------------------
+
+  Future<LocalTransaction?> getByUuid(String localUuid) async {
+    final rows = await _db.query(
+      'transactions',
+      where: 'local_uuid = ?',
+      whereArgs: [localUuid],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return (await _withItems(_db, rows)).single;
+  }
+
+  /// `pending` dan `failed`, dari yang terlama (urutan penjualan).
+  Future<List<LocalTransaction>> getSyncable() async {
+    final rows = await _db.query(
+      'transactions',
+      where: "sync_status IN ('pending', 'failed')",
+      orderBy: 'created_at, rowid',
+    );
+    return _withItems(_db, rows);
+  }
+
+  /// "Belum tersinkron" bagi kasir: belum diterima server dan masih akan dicoba.
+  Future<int> countUnsynced() => _count("('pending', 'syncing', 'failed')");
+
+  Future<int> countConflicts() => _count("('conflict')");
+
+  Future<int> _count(String statuses) async {
+    final rows = await _db.rawQuery(
+      'SELECT COUNT(*) AS n FROM transactions WHERE sync_status IN $statuses',
+    );
+    return (rows.first['n'] as num).toInt();
+  }
+
+  /// `pending`/`failed` -> `syncing`. False bila sudah diambil pemanggil lain
+  /// atau statusnya memang tidak boleh dikirim.
+  Future<bool> markSyncing(String localUuid) {
+    return _transition(
+      localUuid,
+      from: const [SyncStatus.pending, SyncStatus.failed],
+      to: SyncStatus.syncing,
+    );
+  }
+
+  /// `syncing` -> `synced`. Nomor invoice dari server (bisa berakhiran -2 bila
+  /// bertabrakan) menggantikan nomor lokal agar kasir dan owner melihat
+  /// nomor yang sama.
+  Future<bool> markSynced(
+    String localUuid, {
+    required int serverId,
+    required String invoiceNumber,
+    DateTime? syncedAt,
+  }) async {
+    final changed = await _transition(
+      localUuid,
+      from: const [SyncStatus.syncing],
+      to: SyncStatus.synced,
+      extra: {
+        'server_id': serverId,
+        'synced_at': (syncedAt ?? _clock()).toUtc().toIso8601String(),
+      },
+    );
+    if (changed) {
+      // Terpisah dari perpindahan status: tabrakan invoice_number lokal
+      // (sangat jarang) tidak boleh membatalkan status `synced`.
+      try {
+        await _db.update(
+          'transactions',
+          {'invoice_number': invoiceNumber},
+          where: 'local_uuid = ? AND invoice_number <> ?',
+          whereArgs: [localUuid, invoiceNumber],
+        );
+      } on DatabaseException catch (e) {
+        if (!e.isUniqueConstraintError()) rethrow;
+      }
+    }
+    return changed;
+  }
+
+  /// `syncing` -> `failed` (bisa dicoba ulang).
+  Future<bool> markFailed(String localUuid, String message) {
+    return _transition(
+      localUuid,
+      from: const [SyncStatus.syncing],
+      to: SyncStatus.failed,
+      extra: {'sync_message': message},
+    );
+  }
+
+  /// `syncing` -> `conflict`. Transaksi TETAP tersimpan. Karena `conflict`
+  /// tidak dikurangkan dari stok, stok lokal dikembalikan di transaksi SQLite
+  /// yang sama; stok server tidak berubah, jadi pull katalog tidak akan
+  /// mengoreksinya sendiri.
+  Future<bool> markConflict(String localUuid, String message) {
+    return _db.transaction((txn) async {
+      final changed = await _transitionOn(
+        txn,
+        localUuid,
+        from: const [SyncStatus.syncing],
+        to: SyncStatus.conflict,
+        extra: {'sync_message': message},
+      );
+      if (changed) {
+        await txn.rawUpdate(
+          '''
+          UPDATE products SET stock = stock + COALESCE((
+            SELECT SUM(i.quantity) FROM transaction_items i
+            WHERE i.transaction_uuid = ? AND i.product_id = products.id
+          ), 0)
+          WHERE id IN (
+            SELECT product_id FROM transaction_items WHERE transaction_uuid = ?
+          )
+          ''',
+          [localUuid, localUuid],
+        );
+      }
+      return changed;
+    });
+  }
+
+  /// `syncing` -> `pending` tanpa kesalahan transaksi (mis. token ditolak).
+  Future<bool> releaseSyncing(String localUuid) {
+    return _transition(
+      localUuid,
+      from: const [SyncStatus.syncing],
+      to: SyncStatus.pending,
+    );
+  }
+
+  /// Semua `syncing` -> `pending`. Dipanggil saat aplikasi mulai: yang masih
+  /// `syncing` saat itu berarti aplikasi tertutup di tengah pengiriman.
+  /// Aman: bila server sempat menerimanya, kiriman ulang dijawab 200.
+  Future<int> resetInterruptedSyncs() {
+    return _db.update(
+      'transactions',
+      {'sync_status': SyncStatus.pending.name, 'sync_message': null},
+      where: 'sync_status = ?',
+      whereArgs: [SyncStatus.syncing.name],
+    );
+  }
+
+  Future<bool> _transition(
+    String localUuid, {
+    required List<SyncStatus> from,
+    required SyncStatus to,
+    Map<String, Object?> extra = const {},
+  }) => _transitionOn(_db, localUuid, from: from, to: to, extra: extra);
+
+  Future<bool> _transitionOn(
+    DatabaseExecutor executor,
+    String localUuid, {
+    required List<SyncStatus> from,
+    required SyncStatus to,
+    Map<String, Object?> extra = const {},
+  }) async {
+    final marks = List.filled(from.length, '?').join(', ');
+    final updated = await executor.update(
+      'transactions',
+      {
+        'sync_status': to.name,
+        // Pesan lama hilang di setiap perpindahan, kecuali diisi lagi lewat [extra].
+        'sync_message': null,
+        ...extra,
+      },
+      where: 'local_uuid = ? AND sync_status IN ($marks)',
+      whereArgs: [localUuid, ...from.map((status) => status.name)],
+    );
+    return updated == 1;
+  }
+
+  Future<List<LocalTransaction>> _withItems(
+    DatabaseExecutor executor,
+    List<Map<String, Object?>> rows,
+  ) async {
+    final result = <LocalTransaction>[];
+    for (final row in rows) {
+      final uuid = row['local_uuid'] as String;
+      final itemRows = await executor.query(
+        'transaction_items',
+        where: 'transaction_uuid = ?',
+        whereArgs: [uuid],
+        orderBy: 'id',
+      );
+      final syncedAt = row['synced_at'] as String?;
+      result.add(
+        LocalTransaction(
+          localUuid: uuid,
+          invoiceNumber: row['invoice_number'] as String,
+          totalAmount: row['total_amount'] as int,
+          paymentMethod: PaymentMethod.fromValue(
+            row['payment_method'] as String,
+          ),
+          syncStatus: SyncStatus.fromValue(row['sync_status'] as String),
+          createdAt: DateTime.parse(row['created_at'] as String),
+          syncMessage: row['sync_message'] as String?,
+          serverId: row['server_id'] as int?,
+          syncedAt: syncedAt == null ? null : DateTime.parse(syncedAt),
+          items: [
+            for (final item in itemRows)
+              LocalTransactionItem(
+                productId: item['product_id'] as int,
+                productName: item['product_name'] as String,
+                quantity: item['quantity'] as int,
+                price: item['price'] as int,
+              ),
+          ],
+        ),
+      );
+    }
+    return result;
+  }
+
   /// `INV-20261011-A1B2C3`: tanggal lokal + 6 karakter pertama UUID.
   String _invoiceNumber(DateTime now, String localUuid) {
     String two(int n) => n.toString().padLeft(2, '0');
