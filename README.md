@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–9** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–10** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang).
+keranjang, transaksi lokal).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -559,6 +559,72 @@ cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutte
 6. Isi keranjang dengan Pisang Goreng, lalu `...where('name','Pisang Goreng')->first()->delete();` dan tarik layar → barisnya dikeluarkan dengan pemberitahuan.
 7. Pindah ke tab Pengaturan lalu kembali → isi keranjang dan filter pencarian tetap.
 
+### 9. Tahap 10 — Transaksi lokal (Bayar)
+
+Tidak ada paket baru (`uuid` sudah terpasang), tidak ada perubahan backend, skema
+SQLite/MySQL, maupun kontrak API. Salin ulang folder `mobile/` ke `kasir_kantin`
+(timpa file yang sama) dan `README.md` ke akar repositori.
+
+**File baru:** seluruh `lib/features/transactions/` (`domain/` berisi `PaymentMethod`,
+`SyncStatus`, `CheckoutLine`, `LocalTransaction`, `CheckoutException`,
+`TransactionRepository`; `data/transaction_local_data_source.dart` dan
+`transaction_repository_impl.dart`; `presentation/bloc/checkout_*.dart`;
+`presentation/widgets/checkout_sheet.dart`) dan tesnya di `test/features/transactions/`.
+
+**File berubah (timpa):** `lib/main.dart` dan `lib/app/app.dart` (menyediakan
+`TransactionRepository`), `cart_sheet.dart` (tombol **Bayar**, dan CatalogBloc ikut
+diteruskan ke sheet), `catalog_bloc.dart` + `catalog_event.dart` (event
+`CatalogLocalReloaded`), serta `cart_widgets_test.dart` dan `catalog_bloc_test.dart`.
+
+**Alur (AGENTS.md §12, DESIGN.md §17–18):** Keranjang → **Bayar** → sheet *Pembayaran*
+(Total Pembayaran, metode **Tunai | QRIS**, ringkasan) → **Bayar Sekarang** → *Transaksi
+berhasil disimpan · Belum tersinkron* + nomor invoice → **Selesai**.
+
+**Yang terjadi saat Bayar Sekarang** — semuanya di SATU transaksi SQLite, jadi berhasil
+bersama atau batal bersama:
+1. Setiap produk dibaca ULANG dari SQLite (bukan dipercaya dari keranjang).
+2. Ditolak bila produk hilang/nonaktif, harga di SQLite berbeda dari yang dilihat kasir,
+   atau jumlah melebihi stok lokal saat itu. Pesan ditampilkan di sheet dan keranjang
+   tidak berubah.
+3. Baris `transactions` (`pending`), baris `transaction_items` (snapshot nama dan harga),
+   dan pengurangan stok lokal ditulis bersama.
+4. Baru setelah itu keranjang dikosongkan dan katalog membaca ulang stok dari SQLite.
+
+**Keputusan:**
+- **Tanpa server.** Tahap ini tidak memanggil API sama sekali; sukses berarti sudah di
+  SQLite. Karena belum ada pengiriman, hasilnya selalu "Belum tersinkron" sampai tahap
+  11–13. Ini bukan galat dan tidak ditampilkan sebagai gagal.
+- **Ketuk ganda aman.** Tombol nonaktif saat menyimpan, dan BLoC mengabaikan pengiriman
+  kedua; sheet tidak bisa ditutup di tengah penyimpanan.
+- **Nomor invoice** `INV-yyyyMMdd-XXXXXX` (tanggal lokal + 6 karakter pertama UUID).
+  Kolom `invoice_number` UNIQUE; bila bertabrakan dicoba lagi dengan UUID baru (maks. 3
+  kali). Invoice hanya rujukan manusia; idempotensi tetap memakai `local_uuid`.
+- **Stok tidak "kembali" saat sinkronisasi katalog.** Server belum tahu penjualan ini,
+  jadi stok lokal = stok server − transaksi `pending/syncing/failed` (aturan dari tahap 8).
+- **QRIS** hanya pencatatan metode; tidak ada gerbang pembayaran (AGENTS.md §20). Sheet
+  mengingatkan kasir memastikan pembayaran diterima dulu.
+- Belum ada kolom uang diterima/kembalian: skema transaksi (AGENTS.md §9) tidak memilikinya.
+
+**Catatan untuk tahap 11 (API transaksi):** `invoice_number` di server juga UNIQUE. Bila
+dua perangkat menghasilkan invoice yang sama, server tidak boleh menolak transaksi yang
+sah; tentukan perilakunya (mis. server memberi akhiran) sebelum menulis endpoint.
+Pengurangan stok di server memakai Eloquent (`decrement`/`save`), bukan `DB::table`,
+agar `updated_at` berubah dan sinkronisasi inkremental katalog mengambilnya.
+
+**Verifikasi otomatis:**
+```powershell
+cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutter test
+```
+
+**Verifikasi manual di HP** (server berjalan, seeder sudah dijalankan, `.\run_dev.cmd`):
+1. Catat stok awal (mis. Nasi Goreng 20, Es Teh Manis 50). Tambahkan 2 Nasi Goreng + 1 Es Teh Manis → ketuk bar keranjang → **Bayar**.
+2. Sheet *Pembayaran*: Total Rp35.000, **Tunai** terpilih, ringkasan "2 × Nasi Goreng", "1 × Es Teh Manis". Tombol **Bayar Sekarang** terlihat penuh, tidak tertutup tombol navigasi.
+3. Pilih **QRIS** → muncul pengingat; pilih lagi **Tunai**. Ketuk **Bayar Sekarang** → "Transaksi berhasil disimpan", "Belum tersinkron", nomor `INV-…`, Rp35.000, Tunai.
+4. **Selesai** → kembali ke katalog, keranjang kosong, kartu menampilkan **Stok 18** dan **Stok 49**.
+5. **Restart.** Tutup aplikasi sepenuhnya (geser dari daftar aplikasi) dan buka lagi. Setelah sinkronisasi selesai, stok TETAP 18 dan 49 walau server masih 20 dan 50.
+6. **Offline.** Matikan server (atau mode pesawat), bayar satu produk dengan **QRIS** → tetap berhasil dan stok berkurang.
+7. **Stok habis.** Tambahkan Kopi Susu (stok 3) sebanyak 3 dan bayar → stok menjadi 0 dan kartu menampilkan "Habis".
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -581,8 +647,11 @@ cd C:\DIL\pos-kantin\kasir_kantin; dart format lib test; flutter analyze; flutte
 
 - `features/cart/`: `CartBloc` (tambah, ubah jumlah, hapus, kosongkan, selaraskan
   dengan katalog), `CartBar`, `CartSheet`, `QuantityControl`.
+- `features/transactions/`: `CheckoutBloc`, `TransactionRepository` + local data
+  source (satu transaksi SQLite: validasi ulang, tulis transaksi + item + stok),
+  dan sheet pembayaran (Tunai/QRIS, status berhasil disimpan).
 
-Folder `features/transactions` dan `features/sync` dibuat saat dikerjakan.
+Folder `features/sync` dibuat saat dikerjakan.
 
 ---
 
@@ -694,7 +763,7 @@ git push
 
 ## Tahap berikutnya (AGENTS.md §30)
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
-9. Keranjang ✔ → 10. Transaksi lokal → 11. API transaksi (`local_uuid` idempoten,
+9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi (`local_uuid` idempoten,
 `DB::transaction`, `lockForUpdate`, respons 409 untuk stok kurang) →
 12–15. Offline, sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
 
