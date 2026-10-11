@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CatalogController;
+use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -13,7 +14,8 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-// Katalog hanya untuk kasir (AGENTS.md §8). Owner memakai Filament.
+// Katalog dan transaksi hanya untuk kasir (AGENTS.md §8). Owner memakai Filament.
 Route::middleware(['auth:sanctum', 'role:cashier'])->group(function () {
     Route::get('catalog', [CatalogController::class, 'index']);
+    Route::post('transactions', [TransactionController::class, 'store']);
 });
