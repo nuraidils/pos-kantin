@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–10** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–11** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal).
+keranjang, transaksi lokal, API transaksi).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -176,6 +176,71 @@ php artisan test
 | POST | `/api/auth/logout` | token | Menghapus token saat ini (204) |
 | GET | `/api/auth/me` | token | Profil pengguna |
 | GET | `/api/catalog?updated_since=` | token + `cashier` | Kategori & produk. Tanpa parameter = sinkronisasi penuh (tanpa data terhapus). Dengan parameter = semua perubahan sejak waktu itu, **termasuk** yang `deleted_at`-nya terisi. Simpan `meta.server_time` sebagai `updated_since` berikutnya |
+| POST | `/api/transactions` | token + `cashier` | Menerima satu transaksi, **idempoten lewat `local_uuid`**. 201 = baru tersimpan, 200 = `local_uuid` sudah pernah diterima (hasil lama dikembalikan, `meta.duplicate: true`), 409 = stok server kurang (`code: insufficient_stock`, tidak ada yang tersimpan), 422 = payload tidak valid. Lihat bagian *Tahap 11* di bawah |
+
+### Tahap 11 — API transaksi
+
+Tanpa migrasi baru: tabel `transactions` dan `transaction_items` sudah dibuat di
+tahap 1–6. Yang baru: `TransactionController`, `StoreTransactionRequest`,
+`TransactionService`, `TransactionResource`, `InsufficientStockException`, rute
+`POST /api/transactions`, dan tes `TransactionApiTest` + `TransactionAccessTest`.
+
+**Salin overlay** seperti biasa (folder `backend/` di paket ke `backend\`). Satu
+file yang sudah ada ikut berubah: `routes/api.php` (menambah rute transaksi).
+Setelah itu jalankan `php artisan test`.
+
+**Permintaan** (`POST /api/transactions`, header `Authorization: Bearer <token>`):
+```json
+{
+  "local_uuid": "c0a8b2e4-5d3f-4f6a-9c1e-2b7d8e9f0a1b",
+  "invoice_number": "INV-20261011-C0A8B2",
+  "payment_method": "cash",
+  "total_amount": 20000,
+  "created_at": "2026-10-11T08:30:00Z",
+  "items": [{ "product_id": 1, "quantity": 2, "price": 10000, "subtotal": 20000 }]
+}
+```
+`invoice_number` boleh dikosongkan; server membuat sendiri. Respons sukses:
+`{ "data": { id, local_uuid, invoice_number, total_amount, payment_method,
+sync_status, created_at, synced_at, items: [...] }, "meta": { "duplicate": false } }`.
+
+**Respons galat** untuk Tahap 13/14 di Flutter (AGENTS.md §17):
+| Kode | Arti bagi perangkat |
+|---|---|
+| 201 / 200 | Sudah ada di server → `synced` (200 berarti kiriman ulang, bukan galat) |
+| 409 `insufficient_stock` | Konflik bisnis → `conflict`. Isi `shortages[]`: `product_id`, `product_name`, `requested`, `available` |
+| 422 | Payload tidak valid → jangan dicoba ulang terus-menerus |
+| 401 / 403 | Sesi berakhir / bukan kasir |
+| 5xx / jaringan | Dapat dicoba ulang → `failed` |
+
+**Cara kerjanya**, dalam satu `DB::transaction`:
+1. Kunci baris produk (`lockForUpdate`, urut `id` agar tidak saling kunci melingkar).
+2. Cek `local_uuid` yang sudah ada → kembalikan hasil lama (tanpa mengurangi stok lagi).
+   Pengecekan ini sengaja **setelah** kunci produk didapat, supaya dua request kembar
+   yang berbarengan tidak salah dijawab 409.
+3. Cek stok semua item; bila ada yang kurang → 409 dan semuanya dibatalkan.
+4. Tulis transaksi + item (snapshot nama dan harga), kurangi stok lewat Eloquent
+   `decrement` sehingga `updated_at` berubah dan sinkronisasi inkremental katalog
+   membawa stok baru ke perangkat.
+
+**Tes manual** (PowerShell; ganti `TOKEN` dengan token dari login kasir dan pastikan `product_id` ada):
+```powershell
+$body = @{
+  local_uuid     = "c0a8b2e4-5d3f-4f6a-9c1e-2b7d8e9f0a1b"
+  payment_method = "cash"
+  total_amount   = 20000
+  created_at     = "2026-10-11T08:30:00Z"
+  items          = @(@{ product_id = 1; quantity = 2; price = 10000; subtotal = 20000 })
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/transactions `
+  -Headers @{ Authorization = "Bearer TOKEN"; Accept = "application/json" } `
+  -ContentType "application/json" -Body $body
+```
+Kirim dua kali: pertama 201, kedua 200 dan stok hanya berkurang sekali.
+
+Aplikasi Flutter **belum** memanggil endpoint ini (itu Tahap 12–13); tahap ini
+hanya backend.
 
 ---
 
@@ -760,11 +825,20 @@ git push
 4. **Stok lokal tanpa `CHECK >= 0`** karena itu proyeksi optimistik; server yang
    memutuskan lewat status `conflict`.
 5. **Skema server `unsignedInteger` untuk stok**: database juga menolak stok negatif.
+6. **Nomor invoice yang bertabrakan** diberi akhiran `-2`, `-3`, … oleh server
+   (transaksi sah tidak pernah ditolak karena nomor). Perangkat membaca
+   `invoice_number` dari respons dan memperbarui nomor lokalnya di Tahap 13.
+7. **Harga dari perangkat diterima sebagai snapshot saat penjualan**, setelah
+   dicek konsisten (subtotal = harga × jumlah, total = jumlah subtotal). Server
+   tidak menolak bila harga produk di server sudah berubah, karena pelanggan
+   sudah membayar harga lama. Nama produk diambil dari server.
+8. **Produk nonaktif atau terhapus sejak sinkronisasi terakhir tetap diterima**
+   selama stoknya cukup, karena barangnya memang sudah terjual. Hanya `product_id`
+   yang sama sekali tidak ada yang ditolak (422).
 
 ## Tahap berikutnya (AGENTS.md §30)
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
-9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi (`local_uuid` idempoten,
-`DB::transaction`, `lockForUpdate`, respons 409 untuk stok kurang) →
+9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ →
 12–15. Offline, sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
 
 Catatan untuk tahap sync: saat aplikasi mulai, transaksi berstatus `syncing`
