@@ -282,4 +282,41 @@ void main() {
       },
     );
   });
+  group('CatalogLocalReloaded', () {
+    blocTest<CatalogBloc, CatalogState>(
+      'membaca ulang SQLite (stok baru) tanpa menyentuh server',
+      build: () {
+        when(() => repository.loadLocal()).thenAnswer(
+          (_) async => CatalogSnapshot(
+            categories: const [makanan, minuman],
+            products: [prod(1, 'Nasi Goreng', stock: 7), teh],
+          ),
+        );
+        return build();
+      },
+      act: (bloc) => bloc.add(const CatalogLocalReloaded()),
+      expect: () => [
+        isA<CatalogState>()
+            .having((s) => s.status, 'status', CatalogStatus.ready)
+            .having((s) => s.products.first.stock, 'stok', 7)
+            .having((s) => s.isSyncing, 'isSyncing', false),
+      ],
+      verify: (_) => verifyNever(() => repository.sync()),
+    );
+
+    blocTest<CatalogBloc, CatalogState>(
+      'gagal membaca -> tampilan lama dipertahankan, tanpa galat',
+      build: () {
+        when(() => repository.loadLocal()).thenThrow(Exception('sqlite'));
+        return build();
+      },
+      seed: () => CatalogState(
+        status: CatalogStatus.ready,
+        categories: const [makanan],
+        products: [nasi],
+      ),
+      act: (bloc) => bloc.add(const CatalogLocalReloaded()),
+      expect: () => <CatalogState>[],
+    );
+  });
 }

@@ -259,7 +259,22 @@ void main() {
           tester.view.physicalSize.height / tester.view.devicePixelRatio;
       final totalBottom = tester.getBottomLeft(find.text('Total (1 item)')).dy;
 
+      final payBottom = tester.getBottomLeft(find.text('Bayar')).dy;
+
       expect(totalBottom, lessThanOrEqualTo(screenHeight - navBarHeight));
+      expect(payBottom, lessThanOrEqualTo(screenHeight - navBarHeight));
+    });
+
+    testWidgets('keranjang berisi -> ada tombol Bayar', (tester) async {
+      await pumpSheet(tester, CartState(items: [item(1, 'Kopi Susu')]));
+
+      expect(find.widgetWithText(FilledButton, 'Bayar'), findsOneWidget);
+    });
+
+    testWidgets('keranjang kosong -> tidak ada tombol Bayar', (tester) async {
+      await pumpSheet(tester, const CartState());
+
+      expect(find.text('Bayar'), findsNothing);
     });
 
     testWidgets('Batal pada konfirmasi tidak mengosongkan', (tester) async {

@@ -5,22 +5,31 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../products/presentation/bloc/catalog_bloc.dart';
+import '../../../transactions/presentation/widgets/checkout_sheet.dart';
 import '../../domain/cart_item.dart';
 import '../bloc/cart_bloc.dart';
 import 'quantity_control.dart';
 
-/// Membuka daftar keranjang. CartBloc diteruskan lewat `.value` karena rute
-/// sheet berada di luar pohon widget tempat BlocProvider dipasang.
+/// Membuka daftar keranjang. CartBloc dan CatalogBloc diteruskan lewat
+/// `.value` karena rute sheet berada di luar pohon widget tempat BlocProvider
+/// dipasang. CatalogBloc dibutuhkan sheet pembayaran yang dibuka dari sini.
 Future<void> showCartSheet(BuildContext context) {
-  final bloc = context.read<CartBloc>();
+  final cart = context.read<CartBloc>();
+  final catalog = context.read<CatalogBloc>();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
     backgroundColor: AppColors.background,
-    builder: (_) =>
-        BlocProvider<CartBloc>.value(value: bloc, child: const CartSheet()),
+    builder: (_) => MultiBlocProvider(
+      providers: [
+        BlocProvider<CartBloc>.value(value: cart),
+        BlocProvider<CatalogBloc>.value(value: catalog),
+      ],
+      child: const CartSheet(),
+    ),
   );
 }
 
@@ -51,6 +60,15 @@ class CartSheet extends StatelessWidget {
 
     if (confirmed == true && context.mounted) {
       context.read<CartBloc>().add(const CartCleared());
+    }
+  }
+
+  /// Setelah pembayaran sukses keranjang kosong; sheet keranjang ikut
+  /// ditutup agar kasir kembali ke katalog.
+  Future<void> _checkout(BuildContext context) async {
+    await showCheckoutSheet(context);
+    if (context.mounted && context.read<CartBloc>().state.isEmpty) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -113,7 +131,12 @@ class CartSheet extends StatelessWidget {
               ),
               const Divider(),
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -129,6 +152,24 @@ class CartSheet extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  0,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    onPressed: () => _checkout(context),
+                    child: const Text('Bayar'),
+                  ),
                 ),
               ),
             ],

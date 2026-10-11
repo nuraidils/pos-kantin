@@ -7,6 +7,7 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/domain/auth_repository.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
 import '../features/products/domain/catalog_repository.dart';
+import '../features/transactions/domain/transaction_repository.dart';
 import 'auth_gate.dart';
 
 class App extends StatelessWidget {
@@ -15,12 +16,14 @@ class App extends StatelessWidget {
     required this.database,
     required this.authRepository,
     required this.catalogRepository,
+    required this.transactionRepository,
     this.sessionExpired,
   });
 
   final AppDatabase database;
   final AuthRepository authRepository;
   final CatalogRepository catalogRepository;
+  final TransactionRepository transactionRepository;
 
   /// Event 401 dari ApiClient; AuthBloc mengakhiri sesi saat menerimanya.
   final Stream<void>? sessionExpired;
@@ -33,6 +36,9 @@ class App extends StatelessWidget {
       providers: [
         RepositoryProvider<AppDatabase>.value(value: database),
         RepositoryProvider<CatalogRepository>.value(value: catalogRepository),
+        RepositoryProvider<TransactionRepository>.value(
+          value: transactionRepository,
+        ),
       ],
       child: BlocProvider<AuthBloc>(
         create: (_) =>

@@ -17,6 +17,7 @@ class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
   CatalogBloc({required this._repository}) : super(const CatalogState()) {
     on<CatalogStarted>(_onStarted);
     on<CatalogRefreshed>((event, emit) => _sync(emit));
+    on<CatalogLocalReloaded>(_onLocalReloaded);
     on<CatalogSearchChanged>(
       (event, emit) => emit(state.copyWith(query: event.query)),
     );
@@ -46,6 +47,19 @@ class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
       return;
     }
     await _sync(emit);
+  }
+
+  Future<void> _onLocalReloaded(
+    CatalogLocalReloaded event,
+    Emitter<CatalogState> emit,
+  ) async {
+    try {
+      final snapshot = await _repository.loadLocal();
+      emit(_withSnapshot(state, snapshot));
+    } catch (_) {
+      // Tampilan lama dipertahankan; data di SQLite tidak terpengaruh dan
+      // akan terbaca pada pemuatan berikutnya.
+    }
   }
 
   Future<void> _sync(Emitter<CatalogState> emit) async {

@@ -11,6 +11,8 @@ import 'features/auth/data/auth_repository_impl.dart';
 import 'features/products/data/catalog_local_data_source.dart';
 import 'features/products/data/catalog_remote_data_source.dart';
 import 'features/products/data/catalog_repository_impl.dart';
+import 'features/transactions/data/transaction_local_data_source.dart';
+import 'features/transactions/data/transaction_repository_impl.dart';
 
 /// Composition root: semua dependensi dirangkai di sini, satu kali.
 Future<void> main() async {
@@ -36,11 +38,16 @@ Future<void> main() async {
     local: CatalogLocalDataSource(database),
   );
 
+  final transactionRepository = TransactionRepositoryImpl(
+    local: TransactionLocalDataSource(database),
+  );
+
   runApp(
     App(
       database: database,
       authRepository: authRepository,
       catalogRepository: catalogRepository,
+      transactionRepository: transactionRepository,
       sessionExpired: apiClient.unauthorized,
     ),
   );

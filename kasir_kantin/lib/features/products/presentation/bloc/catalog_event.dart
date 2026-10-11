@@ -35,3 +35,9 @@ final class CatalogCategorySelected extends CatalogEvent {
   @override
   List<Object?> get props => [categoryId];
 }
+
+/// Baca ulang katalog dari SQLite TANPA menyentuh server. Dipakai setelah
+/// transaksi lokal dibuat, karena stok lokal berkurang.
+final class CatalogLocalReloaded extends CatalogEvent {
+  const CatalogLocalReloaded();
+}
