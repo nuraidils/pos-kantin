@@ -11,10 +11,14 @@ import 'package:kasir_kantin/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:kasir_kantin/features/auth/presentation/pages/login_page.dart';
 import 'package:kasir_kantin/features/products/domain/catalog_repository.dart';
 import 'package:kasir_kantin/features/products/domain/catalog_snapshot.dart';
+import 'package:kasir_kantin/features/transactions/domain/transaction_repository.dart';
+
+import '../support/fake_transaction_repository.dart';
 
 class MockAuthBloc extends MockBloc<AuthEvent, AuthState> implements AuthBloc {}
 
-/// AppShell membuat CatalogBloc, sehingga membutuhkan CatalogRepository.
+/// AppShell membuat CatalogBloc dan SyncBloc, sehingga membutuhkan
+/// CatalogRepository dan TransactionRepository.
 /// Katalog kosong dan server tidak terjangkau: cukup untuk memeriksa pemilihan layar.
 class FakeCatalogRepository implements CatalogRepository {
   @override
@@ -35,8 +39,15 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: RepositoryProvider<CatalogRepository>.value(
-          value: FakeCatalogRepository(),
+        home: MultiRepositoryProvider(
+          providers: [
+            RepositoryProvider<CatalogRepository>.value(
+              value: FakeCatalogRepository(),
+            ),
+            RepositoryProvider<TransactionRepository>.value(
+              value: FakeTransactionRepository(),
+            ),
+          ],
           child: BlocProvider<AuthBloc>.value(
             value: bloc,
             child: const AuthGate(),

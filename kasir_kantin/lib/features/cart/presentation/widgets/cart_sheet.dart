@@ -6,6 +6,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../products/presentation/bloc/catalog_bloc.dart';
+import '../../../sync/presentation/bloc/sync_bloc.dart';
 import '../../../transactions/presentation/widgets/checkout_sheet.dart';
 import '../../domain/cart_item.dart';
 import '../bloc/cart_bloc.dart';
@@ -13,10 +14,12 @@ import 'quantity_control.dart';
 
 /// Membuka daftar keranjang. CartBloc dan CatalogBloc diteruskan lewat
 /// `.value` karena rute sheet berada di luar pohon widget tempat BlocProvider
-/// dipasang. CatalogBloc dibutuhkan sheet pembayaran yang dibuka dari sini.
+/// dipasang. CatalogBloc dan SyncBloc dibutuhkan sheet pembayaran yang dibuka
+/// dari sini; tanpa meneruskannya, tombol Bayar akan gagal membuka sheet.
 Future<void> showCartSheet(BuildContext context) {
   final cart = context.read<CartBloc>();
   final catalog = context.read<CatalogBloc>();
+  final sync = context.read<SyncBloc>();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -27,6 +30,7 @@ Future<void> showCartSheet(BuildContext context) {
       providers: [
         BlocProvider<CartBloc>.value(value: cart),
         BlocProvider<CatalogBloc>.value(value: catalog),
+        BlocProvider<SyncBloc>.value(value: sync),
       ],
       child: const CartSheet(),
     ),

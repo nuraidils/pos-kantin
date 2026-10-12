@@ -6,9 +6,12 @@ import 'package:kasir_kantin/app/settings_page.dart';
 import 'package:kasir_kantin/core/theme/app_theme.dart';
 import 'package:kasir_kantin/features/auth/domain/auth_user.dart';
 import 'package:kasir_kantin/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:kasir_kantin/features/sync/presentation/bloc/sync_bloc.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockAuthBloc extends MockBloc<AuthEvent, AuthState> implements AuthBloc {}
+
+class MockSyncBloc extends MockBloc<SyncEvent, SyncState> implements SyncBloc {}
 
 void main() {
   const user = AuthUser(
@@ -18,12 +21,20 @@ void main() {
     role: 'cashier',
   );
   late MockAuthBloc bloc;
+  late MockSyncBloc syncBloc;
 
   setUpAll(() => registerFallbackValue(const AuthStarted()));
 
-  setUp(() => bloc = MockAuthBloc());
+  setUp(() {
+    bloc = MockAuthBloc();
+    syncBloc = MockSyncBloc();
+  });
 
-  Future<void> pumpPage(WidgetTester tester) async {
+  Future<void> pumpPage(
+    WidgetTester tester, {
+    SyncState sync = const SyncState(),
+  }) async {
+    whenListen(syncBloc, const Stream<SyncState>.empty(), initialState: sync);
     whenListen(
       bloc,
       const Stream<AuthState>.empty(),
@@ -33,8 +44,11 @@ void main() {
       MaterialApp(
         theme: AppTheme.light,
         home: Scaffold(
-          body: BlocProvider<AuthBloc>.value(
-            value: bloc,
+          body: MultiBlocProvider(
+            providers: [
+              BlocProvider<AuthBloc>.value(value: bloc),
+              BlocProvider<SyncBloc>.value(value: syncBloc),
+            ],
             child: const SettingsPage(),
           ),
         ),
@@ -81,5 +95,56 @@ void main() {
 
     verifyNever(() => bloc.add(any()));
     expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('tanpa transaksi tertunda -> konfirmasi biasa', (tester) async {
+    await pumpPage(tester);
+
+    await tester.tap(find.text('Keluar'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('belum tersinkron'), findsNothing);
+    expect(find.textContaining('perlu perhatian'), findsNothing);
+    expect(
+      find.textContaining('Data di perangkat ini tidak dihapus.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ada transaksi belum tersinkron -> diberi tahu sebelum keluar', (
+    tester,
+  ) async {
+    await pumpPage(tester, sync: const SyncState(unsyncedCount: 3));
+
+    await tester.tap(find.text('Keluar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Masih ada 3 transaksi yang belum tersinkron.'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('dikirim setelah Anda masuk kembali'),
+      findsOneWidget,
+    );
+    // Tetap bisa keluar: transaksi aman di perangkat.
+    await tester.tap(dialogButton('Keluar'));
+    await tester.pumpAndSettle();
+    verify(() => bloc.add(const AuthLogoutRequested())).called(1);
+  });
+
+  testWidgets('ada konflik -> diberi tahu bahwa transaksinya tetap tersimpan', (
+    tester,
+  ) async {
+    await pumpPage(tester, sync: const SyncState(conflictCount: 2));
+
+    await tester.tap(find.text('Keluar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('2 transaksi perlu perhatian dan tetap tersimpan'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('belum tersinkron'), findsNothing);
   });
 }

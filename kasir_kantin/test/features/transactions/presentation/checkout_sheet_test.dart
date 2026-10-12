@@ -9,6 +9,7 @@ import 'package:kasir_kantin/features/cart/domain/cart_item.dart';
 import 'package:kasir_kantin/features/cart/presentation/bloc/cart_bloc.dart';
 import 'package:kasir_kantin/features/cart/presentation/widgets/cart_sheet.dart';
 import 'package:kasir_kantin/features/products/presentation/bloc/catalog_bloc.dart';
+import 'package:kasir_kantin/features/sync/presentation/bloc/sync_bloc.dart';
 import 'package:kasir_kantin/features/transactions/domain/checkout_exception.dart';
 import 'package:kasir_kantin/features/transactions/domain/checkout_line.dart';
 import 'package:kasir_kantin/features/transactions/domain/local_transaction.dart';
@@ -23,6 +24,8 @@ class MockCartBloc extends MockBloc<CartEvent, CartState> implements CartBloc {}
 
 class MockCatalogBloc extends MockBloc<CatalogEvent, CatalogState>
     implements CatalogBloc {}
+
+class MockSyncBloc extends MockBloc<SyncEvent, SyncState> implements SyncBloc {}
 
 class MockTransactionRepository extends Mock implements TransactionRepository {}
 
@@ -67,11 +70,13 @@ void main() {
 
   late MockCartBloc cart;
   late MockCatalogBloc catalog;
+  late MockSyncBloc syncBloc;
   late MockTransactionRepository repository;
 
   setUpAll(() {
     registerFallbackValue(const CartCleared());
     registerFallbackValue(const CatalogLocalReloaded());
+    registerFallbackValue(const SyncRequested());
     registerFallbackValue(<CheckoutLine>[]);
     registerFallbackValue(PaymentMethod.cash);
   });
@@ -79,7 +84,13 @@ void main() {
   setUp(() {
     cart = MockCartBloc();
     catalog = MockCatalogBloc();
+    syncBloc = MockSyncBloc();
     repository = MockTransactionRepository();
+    whenListen(
+      syncBloc,
+      const Stream<SyncState>.empty(),
+      initialState: const SyncState(),
+    );
     whenListen(
       catalog,
       const Stream<CatalogState>.empty(),
@@ -100,6 +111,7 @@ void main() {
     providers: [
       BlocProvider<CartBloc>.value(value: cart),
       BlocProvider<CatalogBloc>.value(value: catalog),
+      BlocProvider<SyncBloc>.value(value: syncBloc),
       BlocProvider<CheckoutBloc>(
         create: (_) => CheckoutBloc(repository: repository),
       ),
@@ -249,6 +261,29 @@ void main() {
       verify(() => catalog.add(const CatalogLocalReloaded())).called(1);
     });
 
+    testWidgets('berhasil -> langsung meminta pengiriman ke server', (
+      tester,
+    ) async {
+      stubCreate(() async => receipt);
+      await pumpSheet(tester);
+
+      await tapPay(tester);
+
+      verify(() => syncBloc.add(const SyncRequested())).called(1);
+    });
+
+    testWidgets('ditolak -> tidak meminta pengiriman', (tester) async {
+      stubCreate(
+        () async =>
+            throw CheckoutInsufficientStockException('Kopi Susu', available: 1),
+      );
+      await pumpSheet(tester);
+
+      await tapPay(tester);
+
+      verifyNever(() => syncBloc.add(any()));
+    });
+
     testWidgets('ditolak -> pesan jelas, keranjang utuh, bisa mencoba lagi', (
       tester,
     ) async {
@@ -317,6 +352,7 @@ void main() {
               providers: [
                 BlocProvider<CartBloc>.value(value: cart),
                 BlocProvider<CatalogBloc>.value(value: catalog),
+                BlocProvider<SyncBloc>.value(value: syncBloc),
               ],
               child: Builder(
                 builder: (context) => Scaffold(
@@ -368,6 +404,8 @@ void main() {
       await tester.tap(find.text('Selesai'));
       await tester.pumpAndSettle();
 
+      // SyncBloc sampai ke sheet pembayaran lewat sheet keranjang.
+      verify(() => syncBloc.add(const SyncRequested())).called(1);
       expect(find.text('Transaksi berhasil disimpan'), findsNothing);
       expect(find.text('Keranjang'), findsNothing);
       expect(find.text('Keranjang masih kosong'), findsNothing);

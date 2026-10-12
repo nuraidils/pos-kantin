@@ -4,19 +4,37 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
+import '../features/sync/presentation/bloc/sync_bloc.dart';
 
-/// Tab Pengaturan. Saat ini hanya akun & keluar; sinkronisasi menyusul.
+/// Tab Pengaturan. Saat ini hanya akun & keluar.
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   Future<void> _confirmLogout(BuildContext context) async {
+    // Transaksi yang belum diterima server tetap aman di perangkat, tetapi
+    // baru terkirim setelah kasir masuk lagi. Kasir perlu tahu itu sebelum
+    // keluar (AGENTS.md Rule 6).
+    final sync = context.read<SyncBloc>().state;
+    final notes = <String>[
+      if (sync.unsyncedCount > 0)
+        'Masih ada ${sync.unsyncedCount} transaksi yang belum tersinkron. '
+            'Transaksi tetap tersimpan di perangkat ini dan akan dikirim '
+            'setelah Anda masuk kembali.',
+      if (sync.conflictCount > 0)
+        '${sync.conflictCount} transaksi perlu perhatian dan tetap '
+            'tersimpan di perangkat ini.',
+    ];
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Keluar dari akun?'),
-        content: const Text(
-          'Data di perangkat ini tidak dihapus. '
-          'Anda membutuhkan koneksi internet untuk masuk kembali.',
+        content: Text(
+          [
+            ...notes,
+            if (notes.isEmpty) 'Data di perangkat ini tidak dihapus.',
+            'Anda membutuhkan koneksi internet untuk masuk kembali.',
+          ].join('\n\n'),
         ),
         actions: [
           TextButton(

@@ -7,6 +7,7 @@ import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../cart/presentation/bloc/cart_bloc.dart';
 import '../../../products/presentation/bloc/catalog_bloc.dart';
+import '../../../sync/presentation/bloc/sync_bloc.dart';
 import '../../domain/checkout_line.dart';
 import '../../domain/local_transaction.dart';
 import '../../domain/payment_method.dart';
@@ -14,11 +15,12 @@ import '../../domain/transaction_repository.dart';
 import '../bloc/checkout_bloc.dart';
 
 /// Membuka sheet pembayaran (DESIGN.md §17). CheckoutBloc dibuat di sini,
-/// satu per sheet, sedangkan CartBloc dan CatalogBloc diteruskan lewat
+/// satu per sheet, sedangkan CartBloc, CatalogBloc, dan SyncBloc diteruskan lewat
 /// `.value` karena rute sheet berada di luar pohon widget BlocProvider.
 Future<void> showCheckoutSheet(BuildContext context) {
   final cart = context.read<CartBloc>();
   final catalog = context.read<CatalogBloc>();
+  final sync = context.read<SyncBloc>();
   final repository = context.read<TransactionRepository>();
 
   return showModalBottomSheet<void>(
@@ -33,6 +35,7 @@ Future<void> showCheckoutSheet(BuildContext context) {
       providers: [
         BlocProvider<CartBloc>.value(value: cart),
         BlocProvider<CatalogBloc>.value(value: catalog),
+        BlocProvider<SyncBloc>.value(value: sync),
         BlocProvider<CheckoutBloc>(
           create: (_) => CheckoutBloc(repository: repository),
         ),
@@ -58,6 +61,8 @@ class CheckoutSheet extends StatelessWidget {
             // pesan yang menyesatkan.
             context.read<CartBloc>().add(const CartCleared());
             context.read<CatalogBloc>().add(const CatalogLocalReloaded());
+            // Kirim ke server di belakang layar; kasir tidak menunggunya.
+            context.read<SyncBloc>().add(const SyncRequested());
           case CheckoutStatus.failure:
             // Penyebab umum: stok lokal berubah. Muat ulang agar keranjang
             // menyesuaikan diri dengan data terbaru.
