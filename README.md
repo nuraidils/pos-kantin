@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–12** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–13** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -747,6 +747,121 @@ Bukti bahwa transaksi sendiri bertahan setelah aplikasi ditutup ada di tes otoma
 (`transaction_sync_status_test.dart`, grup *bertahan setelah aplikasi ditutup*), yang
 memakai file database sungguhan lalu membukanya kembali.
 
+### 11. Tahap 13 — Sinkronisasi otomatis (kirim transaksi ke server)
+
+Mulai tahap ini transaksi yang tersimpan di HP **terkirim sendiri** ke server, dan
+kasir melihat statusnya. Pembayaran tetap selesai di HP lebih dulu; kasir tidak
+pernah menunggu server (AGENTS.md §12).
+
+**Salin overlay:** folder `mobile/` di paket ke `kasir_kantin\` (timpa file yang
+sama). Tidak ada perubahan backend, jadi `backend\` tidak disentuh.
+
+**Tes otomatis** (di `kasir_kantin\`):
+```powershell
+dart format lib test; flutter analyze; flutter test
+```
+Tes baru ada di `test/features/sync/` dan `test/support/`; tiga tes lama
+(`auth_gate_test`, `settings_page_test`, `checkout_sheet_test`) ikut diperbarui
+karena kerangka aplikasi sekarang memiliki `SyncBloc`.
+
+**Kapan transaksi dikirim**
+- Saat kasir selesai membayar (langsung, di belakang layar).
+- Saat aplikasi baru dibuka setelah masuk. Transaksi yang tertinggal `syncing`
+  (aplikasi tertutup saat mengirim) dipulihkan ke `pending` dulu.
+- Tiap 30 detik, dan saat aplikasi dibuka kembali dari latar belakang.
+  Aplikasi tidak memantau koneksi: begitu internet kembali, transaksi terkirim
+  paling lambat 30 detik kemudian.
+- Tombol **Coba Lagi** di banner.
+
+**Aturan pengiriman**
+- Satu putaran pada satu waktu, dari transaksi terlama. Pengiriman ulang aman
+  karena server idempoten lewat `local_uuid` (tidak ada transaksi ganda).
+- Bila satu transaksi gagal karena jaringan atau server, putaran berhenti dan
+  sisanya dicoba lagi di pemicu berikutnya. Tidak ada yang dihapus.
+- Bila server menolak karena stok kurang (409), transaksi menjadi `conflict` dan
+  **tidak** dikirim ulang. Putaran tetap lanjut ke transaksi lain.
+- Setelah ada transaksi yang tersinkron atau menjadi konflik, katalog dibaca ulang
+  dan ditarik dari server supaya stok di layar akurat.
+
+**Banner status** (muncul di atas semua tab, hilang saat semuanya beres):
+| Keadaan | Teks |
+|---|---|
+| Menunggu dikirim | `2 transaksi menunggu sinkronisasi` |
+| Sedang dikirim | `Menyinkronkan 2 transaksi...` |
+| Gagal dikirim | `2 transaksi belum tersinkron. Akan dicoba lagi otomatis.` + tombol Coba Lagi |
+| Konflik | `1 transaksi perlu perhatian` |
+
+Rincian konflik (alasan dan produk mana) menyusul di Tahap 14, dan daftar transaksi
+di Tahap 15. Dialog **Keluar** di Pengaturan kini memberi tahu bila masih ada
+transaksi belum tersinkron; transaksinya tetap tersimpan dan terkirim setelah
+masuk kembali.
+
+#### Uji manual (±10 menit)
+
+**Persiapan**
+1. Buka terminal PowerShell di folder `backend\` dan jalankan `php artisan serve`.
+   Biarkan terbuka (ini "terminal server").
+2. Buka terminal PowerShell kedua di folder `backend\` (ini "terminal cek"). Perintah
+   untuk melihat jumlah transaksi di server:
+   ```powershell
+   php artisan tinker --execute="echo App\Models\Transaction::count();"
+   ```
+   Jalankan, **catat angkanya** (sebut saja `N`).
+3. Jalankan aplikasi di HP seperti biasa (`.\run_dev.cmd` di `kasir_kantin\`) dan masuk
+   sebagai kasir.
+
+**Skenario 1 — Online, terkirim otomatis**
+1. Bayar satu produk (Tunai).
+2. Hasil yang benar: banner `Menyinkronkan 1 transaksi...` sebentar (bisa terlalu
+   cepat untuk terlihat), lalu **tidak ada banner**.
+3. Jalankan perintah di terminal cek. Hasil yang benar: `N + 1`. Catat sebagai `N`.
+
+**Skenario 2 — Offline lalu online (inti Tahap 13)**
+1. Di terminal server tekan `Ctrl+C` untuk mematikan server.
+2. Di HP bayar **dua** transaksi (produk bebas, stok cukup). Pembayaran tetap
+   berhasil dengan "Transaksi berhasil disimpan".
+3. Hasil yang benar: banner `2 transaksi belum tersinkron. Akan dicoba lagi otomatis.`
+   (boleh sempat tampil `menunggu sinkronisasi` dulu).
+4. Nyalakan server lagi: `php artisan serve` di terminal server.
+5. Tunggu **sampai 30 detik** (atau ketuk **Coba Lagi**). Hasil yang benar: banner
+   hilang.
+6. Terminal cek. Hasil yang benar: **tepat** `N + 2` (bukan lebih, tidak ada ganda).
+
+**Skenario 3 — Aplikasi ditutup saat ada transaksi tertunda**
+1. Matikan server (`Ctrl+C`), bayar satu transaksi di HP. Banner `belum tersinkron`.
+2. Tutup aplikasi sepenuhnya (geser dari daftar aplikasi).
+3. Nyalakan server, buka aplikasi lagi, masuk bila diminta.
+4. Hasil yang benar: banner (`1 transaksi menunggu sinkronisasi` atau
+   `Menyinkronkan 1 transaksi...`) hilang dalam beberapa detik, dan terminal cek
+   menunjukkan jumlah naik tepat 1.
+
+**Skenario 4 — Peringatan saat keluar**
+1. Matikan server, bayar satu transaksi (banner `belum tersinkron`).
+2. Pengaturan → **Keluar**. Hasil yang benar: dialog menyebut
+   `Masih ada 1 transaksi yang belum tersinkron...`. Ketuk **Batal**.
+3. Nyalakan server, tunggu banner hilang.
+
+**Skenario 5 — Konflik stok (opsional, tapi menguji aturan terpenting)**
+Setelah skenario ini banner `perlu perhatian` akan tetap ada sampai Tahap 14
+(ini normal). Cara membersihkannya ada di akhir.
+1. Matikan server. Di HP bayar **3** buah Nasi Goreng (id 1) lewat tab Kasir.
+2. Di terminal cek, jadikan stok server habis:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::find(1)->update(['stock'=>0]);"
+   ```
+3. Nyalakan server dan tunggu sampai 30 detik.
+4. Hasil yang benar: banner `1 transaksi perlu perhatian`, tidak ada `menunggu`,
+   dan Nasi Goreng tampil **Habis**. Jumlah transaksi di server tidak bertambah.
+5. Kembalikan stok server:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::find(1)->update(['stock'=>20]);"
+   ```
+6. Bersihkan data konflik di HP: Pengaturan Android → Aplikasi → Kasir Kantin →
+   Penyimpanan → **Hapus data**, lalu buka aplikasi dan masuk lagi.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan
+teks banner yang muncul) ke chat.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -774,9 +889,11 @@ memakai file database sungguhan lalu membukanya kembali.
   dan sheet pembayaran (Tunai/QRIS, status berhasil disimpan).
 
 - Tahap 12: `TransactionRemoteDataSource`, perpindahan status sinkronisasi di SQLite,
-  dan `syncTransaction` di repository (belum dipanggil dari mana pun).
-
-Folder `features/sync` dibuat di Tahap 13.
+  dan `syncTransaction` di repository.
+- Tahap 13: `features/sync/` berisi `SyncBloc` (kirim berurutan, satu putaran pada
+  satu waktu, berhenti di kegagalan pertama), `SyncScheduler` (timer 30 detik dan
+  saat aplikasi dibuka kembali), dan `SyncStatusBanner`. `AppShell` merangkainya;
+  sheet pembayaran memicu pengiriman begitu transaksi tersimpan.
 
 ---
 
@@ -882,12 +999,13 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 10 | `feat(mobile): transaksi lokal dan pembayaran` (sudah dipakai) |
 | 11 | `feat(backend): api transaksi idempoten dengan validasi stok` |
 | 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` |
+| 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(backend): api transaksi idempoten dengan validasi stok"
+git commit -m "feat(mobile): sinkronisasi otomatis transaksi ke server"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -922,14 +1040,27 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
     mengurangkan `conflict`, dan stok server tidak berubah karena penolakan,
     sehingga pull katalog tidak akan mengoreksinya sendiri.
 11. **Nomor invoice server menggantikan nomor lokal** setelah `synced` (bisa berakhiran `-2`).
+12. **Tanpa pemantau koneksi.** Tidak ada paket baru: internet yang kembali terdeteksi
+    lewat timer 30 detik atau saat aplikasi dibuka kembali. Cukup untuk MVP; pemantau
+    koneksi bisa ditambahkan nanti bila 30 detik terasa lama.
+13. **Putaran berhenti di kegagalan pertama** (jaringan/server), supaya server yang
+    sedang bermasalah tidak ditembak berulang kali. `conflict` tidak menghentikan putaran.
+14. **Katalog ditarik setelah pengiriman** yang mengubah data lokal. Ini juga
+    membetulkan proyeksi stok bila tarikan katalog sempat bertepatan dengan transaksi
+    yang sedang dikirim (server sudah mengurangi stok, tetapi transaksi masih
+    dihitung belum tersinkron).
+15. **Akses ditolak 403** membuat transaksi kembali `pending` dan dicoba lagi tiap
+    30 detik. Untuk 401, `ApiClient` sudah mengakhiri sesi lewat `AuthBloc`.
+16. **Peringatan di dialog Keluar** bila ada transaksi belum tersinkron atau konflik.
+    Database lokal tetap tidak pernah dihapus saat keluar (Rule 6).
 
 ## Tahap berikutnya (AGENTS.md §30)
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
-(lapisan data) ✔ →
-13–15. Sync engine, konflik, riwayat → 16–18. Filament, laporan, statistik.
+(lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
+14–15. Penanganan konflik, riwayat → 16–18. Filament, laporan, statistik.
 
-Catatan untuk tahap sync: saat aplikasi mulai, transaksi berstatus `syncing`
-yang tertinggal (aplikasi tertutup mendadak) harus dikembalikan ke `pending`;
-dan **logout tidak boleh menghapus database lokal** selama masih ada transaksi
-yang belum tersinkron (AGENTS.md Rule 6).
+Catatan untuk Tahap 14: transaksi `conflict` sudah terhitung di banner dan tidak
+hilang, tetapi alasannya (mis. "Transaksi tidak dapat disinkronkan karena stok di
+server tidak mencukupi.") baru tersimpan di SQLite dan belum ditampilkan. Tahap 14
+menampilkannya dan menentukan apa yang boleh dilakukan kasir pada transaksi itu.
