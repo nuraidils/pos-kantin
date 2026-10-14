@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–13** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–14** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -791,8 +791,8 @@ karena kerangka aplikasi sekarang memiliki `SyncBloc`.
 | Gagal dikirim | `2 transaksi belum tersinkron. Akan dicoba lagi otomatis.` + tombol Coba Lagi |
 | Konflik | `1 transaksi perlu perhatian` |
 
-Rincian konflik (alasan dan produk mana) menyusul di Tahap 14, dan daftar transaksi
-di Tahap 15. Dialog **Keluar** di Pengaturan kini memberi tahu bila masih ada
+Rincian konflik ada di Tahap 14 (halaman Perlu Perhatian), dan daftar transaksi
+menyusul di Tahap 15. Dialog **Keluar** di Pengaturan kini memberi tahu bila masih ada
 transaksi belum tersinkron; transaksinya tetap tersimpan dan terkirim setelah
 masuk kembali.
 
@@ -842,8 +842,8 @@ masuk kembali.
 3. Nyalakan server, tunggu banner hilang.
 
 **Skenario 5 — Konflik stok (opsional, tapi menguji aturan terpenting)**
-Setelah skenario ini banner `perlu perhatian` akan tetap ada sampai Tahap 14
-(ini normal). Cara membersihkannya ada di akhir.
+Setelah skenario ini banner `perlu perhatian` akan tetap ada. Di Tahap 14 ia
+bisa dibersihkan lewat Kirim Ulang; cara lama (hapus data) ada di akhir.
 1. Matikan server. Di HP bayar **3** buah Nasi Goreng (id 1) lewat tab Kasir.
 2. Di terminal cek, jadikan stok server habis:
    ```powershell
@@ -861,6 +861,86 @@ Setelah skenario ini banner `perlu perhatian` akan tetap ada sampai Tahap 14
 
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan
 teks banner yang muncul) ke chat.
+
+### 12. Tahap 14 — Penanganan konflik
+
+Transaksi yang ditolak server (mis. stok di server tidak cukup) berstatus
+`conflict`. Mulai tahap ini kasir bisa **melihat alasannya** dan **mengirim
+ulang**. Tidak ada tombol hapus atau ubah jumlah (AGENTS.md §13.4): data
+transaksi selalu utuh.
+
+**Salin overlay:** folder `mobile/` di paket ke `kasir_kantin\` (timpa). Tidak ada
+perubahan backend.
+
+**Tes otomatis** (di `kasir_kantin\`):
+```powershell
+dart format lib test; flutter analyze; flutter test
+```
+Tes baru: `conflict_bloc_test`, `conflict_page_test`, `transaction_conflict_test`.
+
+**Yang berubah**
+- Banner `1 transaksi perlu perhatian` kini bisa diketuk (ada tulisan **Lihat**).
+  Ketukan membuka halaman **Perlu Perhatian**.
+- Halaman itu menampilkan tiap transaksi konflik: nomor invoice, waktu, metode,
+  **alasan** (mis. `... stok di server tidak mencukupi. Nasi Goreng (diminta 3,
+  tersedia 0).`), daftar produk, total, dan tombol **Kirim Ulang**.
+- **Kirim Ulang** mengembalikan transaksi ke `pending` (isinya tidak berubah) dan
+  langsung dikirim. Bila server masih menolak, ia kembali menjadi konflik dengan
+  alasan terbaru. Bila diterima, ia `synced` dan hilang dari daftar.
+- Saat Kirim Ulang, stok di HP dikurangi lagi (kebalikan dari saat konflik), lalu
+  katalog ditarik dari server.
+
+#### Uji manual (±10 menit)
+
+**Persiapan** (sama seperti Tahap 13)
+1. Terminal server di `backend\`: `php artisan serve` (biarkan terbuka).
+2. Terminal cek di `backend\`. Hitung transaksi di server:
+   ```powershell
+   php artisan tinker --execute="echo App\Models\Transaction::count();"
+   ```
+   Catat angkanya sebagai `N`.
+3. Jalankan aplikasi di HP (`.\run_dev.cmd`) dan masuk sebagai kasir.
+
+**Skenario 1 — Membuat konflik dan melihat alasannya**
+1. Matikan server (`Ctrl+C` di terminal server).
+2. Di HP, tab Kasir: bayar **3** buah Nasi Goreng (Tunai).
+3. Di terminal cek, habiskan stok server:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::find(1)->update(['stock'=>0]);"
+   ```
+4. Nyalakan server (`php artisan serve`). Tunggu sampai 30 detik.
+5. Hasil yang benar: banner `1 transaksi perlu perhatian` dengan tulisan **Lihat**.
+6. Ketuk banner. Hasil yang benar: halaman **Perlu Perhatian** berisi satu kartu
+   dengan alasan `Transaksi tidak dapat disinkronkan karena stok di server tidak
+   mencukupi. Nasi Goreng (diminta 3, tersedia 0).`, item `3 × Nasi Goreng`, dan
+   tombol **Kirim Ulang**.
+7. Hitung transaksi di server. Hasil yang benar: tetap `N` (belum bertambah).
+
+**Skenario 2 — Kirim Ulang saat stok masih kurang**
+1. Di halaman itu ketuk **Kirim Ulang**.
+2. Hasil yang benar: dalam beberapa detik kartu muncul lagi dengan alasan yang sama
+   (stok server masih 0). Transaksi tidak hilang. Server tetap `N`.
+
+**Skenario 3 — Kirim Ulang setelah stok diperbaiki**
+1. Kembalikan stok server:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::find(1)->update(['stock'=>20]);"
+   ```
+2. Di halaman Perlu Perhatian ketuk **Kirim Ulang**.
+3. Hasil yang benar: dalam beberapa detik kartu hilang dan halaman berisi
+   `Tidak ada transaksi yang perlu perhatian`.
+4. Tekan tombol kembali. Hasil yang benar: tidak ada banner sama sekali.
+5. Hitung transaksi di server. Hasil yang benar: `N + 1`. Stok Nasi Goreng di
+   tab Kasir menjadi **17**.
+
+**Skenario 3b — Konflik bertahan setelah aplikasi ditutup** (bisa dilakukan sebelum
+skenario 3)
+1. Dari kondisi akhir skenario 2, tutup aplikasi sepenuhnya lalu buka lagi dan masuk.
+2. Hasil yang benar: banner `1 transaksi perlu perhatian` masih ada dan kartunya
+   tetap berisi alasan yang sama.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat.
 
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
@@ -890,6 +970,7 @@ teks banner yang muncul) ke chat.
 
 - Tahap 12: `TransactionRemoteDataSource`, perpindahan status sinkronisasi di SQLite,
   dan `syncTransaction` di repository.
+- Tahap 14: `ConflictBloc`, `ConflictPage` (daftar "Perlu Perhatian" + Kirim Ulang), banner konflik dapat diketuk; `getConflictTransactions` dan `retryConflict` di repository.
 - Tahap 13: `features/sync/` berisi `SyncBloc` (kirim berurutan, satu putaran pada
   satu waktu, berhenti di kegagalan pertama), `SyncScheduler` (timer 30 detik dan
   saat aplikasi dibuka kembali), dan `SyncStatusBanner`. `AppShell` merangkainya;
@@ -999,13 +1080,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 10 | `feat(mobile): transaksi lokal dan pembayaran` (sudah dipakai) |
 | 11 | `feat(backend): api transaksi idempoten dengan validasi stok` |
 | 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` |
-| 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` |
+| 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` (sudah dipakai) |
+| 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(mobile): sinkronisasi otomatis transaksi ke server"
+git commit -m "feat(mobile): halaman konflik transaksi dan kirim ulang"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1058,9 +1140,17 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
-14–15. Penanganan konflik, riwayat → 16–18. Filament, laporan, statistik.
+14. Penanganan konflik ✔ → 15. Riwayat transaksi → 16–18. Filament, laporan, statistik.
 
-Catatan untuk Tahap 14: transaksi `conflict` sudah terhitung di banner dan tidak
-hilang, tetapi alasannya (mis. "Transaksi tidak dapat disinkronkan karena stok di
-server tidak mencukupi.") baru tersimpan di SQLite dan belum ditampilkan. Tahap 14
-menampilkannya dan menentukan apa yang boleh dilakukan kasir pada transaksi itu.
+Catatan untuk Tahap 15: tab Riwayat masih keadaan kosong. Tahap 15 menampilkan
+semua transaksi (termasuk status tiap transaksi), dan layar struk yang kini selalu
+bertuliskan "Belum tersinkron" akan mengikuti status sebenarnya.
+
+## Keputusan Tahap 14
+17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
+    atau ubah jumlah (AGENTS.md §13.4). Pengurangan jumlah dan pembatalan sebaiknya
+    dilakukan owner/dashboard (Tahap 16), karena uang sudah diterima dari pelanggan.
+18. **Kirim Ulang tidak mengecek stok lokal.** Stok server yang memutuskan; stok lokal
+    boleh sementara negatif sampai tarikan katalog berikutnya.
+19. **Konflik tidak pernah dikirim ulang otomatis**, hanya lewat tombol, supaya tidak
+    menembak server yang jelas menolak tiap 30 detik.
