@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–14** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–15** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -942,6 +942,106 @@ skenario 3)
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
 yang muncul) ke chat.
 
+### 13. Tahap 15 — Riwayat transaksi dan struk yang jujur
+
+Tab **Riwayat** kini berisi semua transaksi di HP (apa pun statusnya), terbaru di
+atas, dan bisa dibuka tanpa internet. Layar struk setelah pembayaran tidak lagi
+selalu bertuliskan "Belum tersinkron": statusnya **mengikuti keadaan sebenarnya**.
+
+**Salin overlay:** folder `mobile/` di paket ke `kasir_kantin\` (timpa). Tidak ada
+perubahan backend.
+
+**Tes otomatis** (di `kasir_kantin\`):
+```powershell
+dart format lib test; flutter analyze; flutter test
+```
+Tes baru: `history_bloc_test`, `history_page_test`. Tes yang diperluas:
+`checkout_bloc_test`, `checkout_sheet_test`, `transaction_conflict_test`.
+
+**Yang berubah**
+- Tab **Riwayat**: satu kartu per transaksi berisi nomor invoice, **status**, waktu,
+  metode, ringkasan produk, dan total. Ketuk kartu untuk membuka **Detail Transaksi**.
+- Label status (DESIGN.md §20), selalu ikon + teks:
+  `Menunggu sinkronisasi` · `Menyinkronkan...` · `Tersinkron` ·
+  `Gagal disinkronkan` · `Perlu perhatian`.
+- Struk setelah **Bayar Sekarang** tetap berjudul `Transaksi berhasil disimpan`,
+  lalu status di bawahnya berubah sendiri selagi struk terbuka. Transaksi yang
+  gagal terkirim atau konflik menampilkan alasannya.
+- Riwayat dan detail ikut berubah otomatis saat sinkronisasi berjalan.
+- Hanya membaca: tidak ada tombol hapus atau ubah (AGENTS.md Rule 6). Mengirim ulang
+  konflik tetap lewat banner `perlu perhatian` di bagian atas layar (Tahap 14).
+
+#### Uji manual (±15 menit)
+
+**Persiapan**
+1. Terminal server di `backend\`: `php artisan serve` (biarkan terbuka).
+2. Terminal cek di `backend\`. Hitung transaksi di server dan catat angkanya
+   sebagai `N`:
+   ```powershell
+   php artisan tinker --execute="echo App\Models\Transaction::count();"
+   ```
+3. Jalankan aplikasi di HP (`.\run_dev.cmd`) dan masuk sebagai kasir.
+
+**Skenario 1 — Riwayat terisi dan bisa dibuka**
+1. Ketuk tab **Riwayat**.
+2. Hasil yang benar: daftar transaksi dari tahap-tahap sebelumnya, yang terbaru di
+   paling atas. Di bawah judul ada tulisan `X transaksi`. Tiap kartu punya
+   status (kebanyakan `Tersinkron`).
+3. Ketuk satu kartu. Hasil yang benar: muncul **Detail Transaksi** berisi invoice,
+   waktu, metode, produk, dan total. Ketuk ✕ untuk menutup.
+
+**Skenario 2 — Bayar saat server mati: status di struk**
+1. Matikan server (`Ctrl+C` di terminal server).
+2. Tab **Kasir**: bayar 1 buah Nasi Goreng (Tunai).
+3. Hasil yang benar di struk: tulisan `Transaksi berhasil disimpan`. Dalam beberapa
+   detik status berubah menjadi `Gagal disinkronkan` dan ada kalimat `... Akan
+   dicoba lagi otomatis.` (Sebentar sebelumnya boleh tampil `Menunggu
+   sinkronisasi` atau `Menyinkronkan...`.) Transaksi tidak dinyatakan gagal.
+4. Ketuk **Selesai**, lalu buka tab **Riwayat**.
+5. Hasil yang benar: transaksi tadi ada paling atas dengan status yang sama.
+
+**Skenario 3 — Server hidup lagi: status berubah sendiri**
+1. Tetap di tab **Riwayat**. Nyalakan server (`php artisan serve`).
+2. Tunggu sampai 30 detik tanpa menyentuh apa pun.
+3. Hasil yang benar: status kartu berubah menjadi `Tersinkron`, dan banner
+   `transaksi belum tersinkron` di atas layar hilang.
+4. Hitung transaksi di server. Hasil yang benar: `N + 1`.
+
+**Skenario 4 — Struk berubah saat masih terbuka**
+1. Server hidup. Tab **Kasir**: bayar 1 produk apa saja (mis. Es Teh).
+2. Jangan tekan apa pun. Hasil yang benar: dalam beberapa detik status di struk
+   berubah menjadi `Tersinkron`.
+3. Ketuk **Selesai**. Hitung transaksi di server. Hasil yang benar: `N + 2`.
+
+**Skenario 5 — Konflik terlihat di Riwayat**
+1. Matikan server. Tab **Kasir**: bayar **3** buah Nasi Goreng (Tunai). Ketuk
+   **Selesai**.
+2. Di terminal cek, habiskan stok server:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::find(1)->update(['stock'=>0]);"
+   ```
+3. Nyalakan server. Tunggu sampai 30 detik.
+4. Buka tab **Riwayat**. Hasil yang benar: kartu 3 Nasi Goreng berstatus `Perlu
+   perhatian`.
+5. Ketuk kartunya. Hasil yang benar: Detail Transaksi menampilkan alasan
+   `... stok di server tidak mencukupi. Nasi Goreng (diminta 3, tersedia 0).`
+   dan `Transaksi tetap tersimpan`.
+6. Kembalikan stok server, lalu tutup detail:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::find(1)->update(['stock'=>20]);"
+   ```
+7. Ketuk banner `1 transaksi perlu perhatian` di atas layar, lalu **Kirim Ulang**.
+8. Kembali ke tab **Riwayat**. Hasil yang benar (dalam beberapa detik): kartu
+   itu berstatus `Tersinkron`. Server `N + 3`.
+
+**Skenario 6 — Riwayat bertahan setelah aplikasi ditutup**
+1. Tutup aplikasi sepenuhnya, buka lagi, masuk.
+2. Ketuk tab **Riwayat**. Hasil yang benar: semua transaksi tadi masih ada dengan
+   status yang sama.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -956,7 +1056,7 @@ yang muncul) ke chat.
   `AuthGate` yang memilih layar berdasarkan status sesi.
 - `app/settings_page.dart`: kartu akun dan tombol Keluar (dengan konfirmasi).
 - `app/app_shell.dart`: navigasi bawah Kasir · Riwayat · Pengaturan; tab Kasir
-  berisi katalog + keranjang, tab Riwayat masih keadaan kosong.
+  berisi katalog + keranjang, tab Riwayat berisi semua transaksi lokal (Tahap 15).
 - `features/products/`: `CatalogBloc` (muat lokal → sinkronisasi di belakang,
   cari, filter kategori), `CatalogRepository`, remote data source (`/api/catalog`)
   dan local data source (upsert atomik, kursor, proyeksi stok), `CatalogPage`,
@@ -975,6 +1075,10 @@ yang muncul) ke chat.
   satu waktu, berhenti di kegagalan pertama), `SyncScheduler` (timer 30 detik dan
   saat aplikasi dibuka kembali), dan `SyncStatusBanner`. `AppShell` merangkainya;
   sheet pembayaran memicu pengiriman begitu transaksi tersimpan.
+- Tahap 15: `HistoryBloc` + `HistoryPage` (tab Riwayat dan Detail Transaksi),
+  `SyncStatusChip` (label status), `TransactionReceipt` (rincian yang dipakai
+  struk dan detail), `getAllTransactions` di repository, dan `CheckoutReceiptRefreshed`
+  agar struk mengikuti status sinkronisasi.
 
 ---
 
@@ -1081,13 +1185,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 11 | `feat(backend): api transaksi idempoten dengan validasi stok` |
 | 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` |
 | 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` (sudah dipakai) |
-| 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` |
+| 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` (sudah dipakai) |
+| 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(mobile): halaman konflik transaksi dan kirim ulang"
+git commit -m "feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1140,11 +1245,10 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
-14. Penanganan konflik ✔ → 15. Riwayat transaksi → 16–18. Filament, laporan, statistik.
+14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16–18. Filament, laporan, statistik.
 
-Catatan untuk Tahap 15: tab Riwayat masih keadaan kosong. Tahap 15 menampilkan
-semua transaksi (termasuk status tiap transaksi), dan layar struk yang kini selalu
-bertuliskan "Belum tersinkron" akan mengikuti status sebenarnya.
+Catatan untuk Tahap 16: dashboard Filament untuk owner (produk, kategori, transaksi).
+Pengurangan jumlah atau pembatalan transaksi konflik (lihat Keputusan 17) dibahas di sana.
 
 ## Keputusan Tahap 14
 17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
@@ -1154,3 +1258,17 @@ bertuliskan "Belum tersinkron" akan mengikuti status sebenarnya.
     boleh sementara negatif sampai tarikan katalog berikutnya.
 19. **Konflik tidak pernah dikirim ulang otomatis**, hanya lewat tombol, supaya tidak
     menembak server yang jelas menolak tiap 30 detik.
+
+## Keputusan Tahap 15
+20. **Riwayat membaca SQLite, bukan server.** Riwayat tampil tanpa internet dan
+    mencakup semua status, termasuk `conflict`, sesuai AGENTS.md §4.1 dan Rule 6.
+    Transaksi yang dibuat di perangkat lain tidak tampil (MVP satu kasir).
+21. **Riwayat dibaca ulang setiap SyncBloc berubah** dan saat tab dibuka, sehingga
+    status di kartu dan detail selalu terbaru tanpa timer tambahan.
+22. **Struk memakai label status yang sama dengan Riwayat** (DESIGN.md §20).
+    Tulisan statis "Belum tersinkron" diganti `Menunggu sinkronisasi` untuk
+    transaksi yang baru dibuat; judul `Transaksi berhasil disimpan` tetap.
+23. **Tidak ada tombol tindakan di Riwayat.** Kirim Ulang konflik tetap di halaman
+    Perlu Perhatian (satu tempat), supaya aturan Tahap 14 tidak terpecah dua.
+24. **Semua transaksi dimuat sekaligus.** Cukup untuk volume kantin; bila daftar
+    kelak terasa lambat, tambahkan pemuatan bertahap atau filter tanggal.
