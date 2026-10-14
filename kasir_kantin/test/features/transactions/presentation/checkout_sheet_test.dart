@@ -4,6 +4,7 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:kasir_kantin/core/theme/app_theme.dart';
 import 'package:kasir_kantin/features/cart/domain/cart_item.dart';
 import 'package:kasir_kantin/features/cart/presentation/bloc/cart_bloc.dart';
@@ -73,7 +74,8 @@ void main() {
   late MockSyncBloc syncBloc;
   late MockTransactionRepository repository;
 
-  setUpAll(() {
+  setUpAll(() async {
+    await initializeDateFormatting('id_ID');
     registerFallbackValue(const CartCleared());
     registerFallbackValue(const CatalogLocalReloaded());
     registerFallbackValue(const SyncRequested());
@@ -230,7 +232,7 @@ void main() {
       ).called(1);
     });
 
-    testWidgets('berhasil -> "disimpan", "Belum tersinkron", rincian', (
+    testWidgets('berhasil -> "disimpan", status menunggu, rincian', (
       tester,
     ) async {
       stubCreate(() async => receipt);
@@ -239,7 +241,7 @@ void main() {
       await tapPay(tester);
 
       expect(find.text('Transaksi berhasil disimpan'), findsOneWidget);
-      expect(find.text('Belum tersinkron'), findsOneWidget);
+      expect(find.text('Menunggu sinkronisasi'), findsOneWidget);
       expect(find.text('INV-20261011-ABC123'), findsOneWidget);
       expect(find.text('Rp25.000'), findsOneWidget);
       expect(find.text('Tunai'), findsOneWidget);
@@ -247,6 +249,70 @@ void main() {
       expect(find.text('Bayar Sekarang'), findsNothing);
       // Tidak ada kata "gagal" untuk transaksi yang sudah tersimpan.
       expect(find.textContaining('gagal'), findsNothing);
+    });
+
+    testWidgets('struk mengikuti status sinkronisasi sebenarnya', (
+      tester,
+    ) async {
+      final syncStates = StreamController<SyncState>.broadcast();
+      addTearDown(syncStates.close);
+      whenListen(syncBloc, syncStates.stream, initialState: const SyncState());
+      stubCreate(() async => receipt);
+      await pumpSheet(tester);
+      await tapPay(tester);
+      expect(find.text('Menunggu sinkronisasi'), findsOneWidget);
+
+      // Server menerima transaksi; SQLite kini berstatus synced.
+      when(() => repository.getTransaction('uuid-1')).thenAnswer(
+        (_) async => LocalTransaction(
+          localUuid: receipt.localUuid,
+          invoiceNumber: 'INV-20261011-ABC123-2',
+          totalAmount: receipt.totalAmount,
+          paymentMethod: receipt.paymentMethod,
+          syncStatus: SyncStatus.synced,
+          createdAt: receipt.createdAt,
+          items: receipt.items,
+        ),
+      );
+      syncStates.add(const SyncState(isSyncing: true, unsyncedCount: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tersinkron'), findsOneWidget);
+      expect(find.text('Menunggu sinkronisasi'), findsNothing);
+      expect(find.text('INV-20261011-ABC123-2'), findsOneWidget);
+    });
+
+    testWidgets('struk konflik menampilkan alasan dan tetap tersimpan', (
+      tester,
+    ) async {
+      final syncStates = StreamController<SyncState>.broadcast();
+      addTearDown(syncStates.close);
+      whenListen(syncBloc, syncStates.stream, initialState: const SyncState());
+      stubCreate(() async => receipt);
+      await pumpSheet(tester);
+      await tapPay(tester);
+
+      when(() => repository.getTransaction('uuid-1')).thenAnswer(
+        (_) async => LocalTransaction(
+          localUuid: receipt.localUuid,
+          invoiceNumber: receipt.invoiceNumber,
+          totalAmount: receipt.totalAmount,
+          paymentMethod: receipt.paymentMethod,
+          syncStatus: SyncStatus.conflict,
+          syncMessage: 'Stok di server tidak mencukupi.',
+          createdAt: receipt.createdAt,
+          items: receipt.items,
+        ),
+      );
+      syncStates.add(const SyncState(conflictCount: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Perlu perhatian'), findsOneWidget);
+      expect(
+        find.textContaining('Stok di server tidak mencukupi.'),
+        findsOneWidget,
+      );
+      expect(find.text('Transaksi berhasil disimpan'), findsOneWidget);
     });
 
     testWidgets('berhasil -> keranjang dikosongkan dan stok dibaca ulang', (

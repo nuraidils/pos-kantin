@@ -177,6 +177,16 @@ class TransactionLocalDataSource {
     return (await _withItems(_db, rows)).single;
   }
 
+  /// Semua transaksi, apa pun statusnya, terbaru dulu. Hanya membaca: tidak ada
+  /// yang diubah atau dihapus (Rule 6).
+  Future<List<LocalTransaction>> getAll() async {
+    final rows = await _db.query(
+      'transactions',
+      orderBy: 'created_at DESC, rowid DESC',
+    );
+    return _withItems(_db, rows);
+  }
+
   /// `pending` dan `failed`, dari yang terlama (urutan penjualan).
   Future<List<LocalTransaction>> getSyncable() async {
     final rows = await _db.query(

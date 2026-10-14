@@ -242,4 +242,63 @@ void main() {
       await bloc.close();
     },
   );
+
+  group('CheckoutReceiptRefreshed', () {
+    LocalTransaction withStatus(SyncStatus status) => LocalTransaction(
+      localUuid: receipt.localUuid,
+      invoiceNumber: receipt.invoiceNumber,
+      totalAmount: receipt.totalAmount,
+      paymentMethod: receipt.paymentMethod,
+      syncStatus: status,
+      createdAt: receipt.createdAt,
+      items: receipt.items,
+    );
+
+    test('membaca ulang transaksi dan memperbarui struk', () async {
+      stubCreate(() async => receipt);
+      when(
+        () => repository.getTransaction('uuid-1'),
+      ).thenAnswer((_) async => withStatus(SyncStatus.synced));
+      final bloc = build();
+      addTearDown(bloc.close);
+
+      bloc.add(const CheckoutSubmitted(lines));
+      await bloc.stream.firstWhere((s) => s.isSuccess);
+      bloc.add(const CheckoutReceiptRefreshed());
+      await bloc.stream.firstWhere(
+        (s) => s.receipt?.syncStatus == SyncStatus.synced,
+      );
+
+      expect(bloc.state.isSuccess, isTrue);
+      expect(bloc.state.receipt!.syncStatus, SyncStatus.synced);
+    });
+
+    test('tanpa struk: tidak membaca apa pun', () async {
+      final bloc = build();
+      addTearDown(bloc.close);
+
+      bloc.add(const CheckoutReceiptRefreshed());
+      await Future<void>.delayed(Duration.zero);
+
+      verifyNever(() => repository.getTransaction(any()));
+      expect(bloc.state.receipt, isNull);
+    });
+
+    test('gagal membaca: struk lama dipertahankan', () async {
+      stubCreate(() async => receipt);
+      when(
+        () => repository.getTransaction('uuid-1'),
+      ).thenThrow(StateError('x'));
+      final bloc = build();
+      addTearDown(bloc.close);
+
+      bloc.add(const CheckoutSubmitted(lines));
+      await bloc.stream.firstWhere((s) => s.isSuccess);
+      bloc.add(const CheckoutReceiptRefreshed());
+      await Future<void>.delayed(Duration.zero);
+
+      expect(bloc.state.isSuccess, isTrue);
+      expect(bloc.state.receipt, receipt);
+    });
+  });
 }

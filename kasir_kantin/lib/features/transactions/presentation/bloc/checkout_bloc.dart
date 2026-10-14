@@ -19,6 +19,7 @@ class CheckoutBloc extends Bloc<CheckoutEvent, CheckoutState> {
   CheckoutBloc({required this._repository}) : super(const CheckoutState()) {
     on<CheckoutMethodSelected>(_onMethodSelected);
     on<CheckoutSubmitted>(_onSubmitted);
+    on<CheckoutReceiptRefreshed>(_onReceiptRefreshed);
   }
 
   final TransactionRepository _repository;
@@ -29,6 +30,22 @@ class CheckoutBloc extends Bloc<CheckoutEvent, CheckoutState> {
   ) {
     if (state.isSubmitting || state.isSuccess) return;
     emit(state.copyWith(method: event.method, error: () => null));
+  }
+
+  Future<void> _onReceiptRefreshed(
+    CheckoutReceiptRefreshed event,
+    Emitter<CheckoutState> emit,
+  ) async {
+    final receipt = state.receipt;
+    if (receipt == null) return;
+    try {
+      final latest = await _repository.getTransaction(receipt.localUuid);
+      if (latest != null && latest != receipt) {
+        emit(state.copyWith(receipt: () => latest));
+      }
+    } catch (_) {
+      // Struk lama tetap tampil; transaksi sendiri aman di SQLite.
+    }
   }
 
   Future<void> _onSubmitted(

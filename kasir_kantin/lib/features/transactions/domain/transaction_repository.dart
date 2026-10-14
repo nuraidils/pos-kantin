@@ -17,6 +17,10 @@ abstract interface class TransactionRepository {
 
   Future<LocalTransaction?> getTransaction(String localUuid);
 
+  /// Semua transaksi lokal dalam SEMUA status, terbaru dulu. Sumber tab
+  /// Riwayat (AGENTS.md §4.1: riwayat terbaca tanpa internet).
+  Future<List<LocalTransaction>> getAllTransactions();
+
   /// Transaksi yang boleh dikirim sekarang (`pending` dan `failed`), dari
   /// yang terlama.
   Future<List<LocalTransaction>> getTransactionsToSync();

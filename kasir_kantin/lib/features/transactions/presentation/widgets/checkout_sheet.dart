@@ -13,6 +13,7 @@ import '../../domain/local_transaction.dart';
 import '../../domain/payment_method.dart';
 import '../../domain/transaction_repository.dart';
 import '../bloc/checkout_bloc.dart';
+import 'transaction_receipt.dart';
 
 /// Membuka sheet pembayaran (DESIGN.md §17). CheckoutBloc dibuat di sini,
 /// satu per sheet, sedangkan CartBloc, CatalogBloc, dan SyncBloc diteruskan lewat
@@ -349,7 +350,9 @@ class _ErrorBanner extends StatelessWidget {
 }
 
 /// Transaksi sudah ada di SQLite. Server tidak dilibatkan, jadi ini bukan
-/// kegagalan melainkan "belum tersinkron" (DESIGN.md §18).
+/// kegagalan (DESIGN.md §18). Status sinkronisasi di bawahnya NYATA: mulai
+/// "Menunggu sinkronisasi", lalu berubah mengikuti SyncBloc (menyinkronkan,
+/// tersinkron, gagal, atau perlu perhatian) selagi struk masih terbuka.
 class _SuccessView extends StatelessWidget {
   const _SuccessView({required this.receipt});
 
@@ -359,102 +362,42 @@ class _SuccessView extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
 
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: AppSpacing.sm),
-          const Icon(Icons.check_circle, size: 56, color: AppColors.success),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            'Transaksi berhasil disimpan',
-            style: text.headlineSmall,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.schedule,
-                size: 18,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                'Belum tersinkron',
-                style: text.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                children: [
-                  _DetailRow(
-                    label: 'No. Invoice',
-                    value: receipt.invoiceNumber,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _DetailRow(
-                    label: 'Metode',
-                    value: receipt.paymentMethod.label,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _DetailRow(
-                    label: 'Total',
-                    value: formatRupiah(receipt.totalAmount),
-                    emphasized: true,
-                  ),
-                ],
+    return BlocListener<SyncBloc, SyncState>(
+      // Setiap perubahan SyncBloc (hitungan, putaran mulai/selesai) bisa
+      // berarti status transaksi ini bergerak: baca ulang dari SQLite.
+      listener: (context, _) =>
+          context.read<CheckoutBloc>().add(const CheckoutReceiptRefreshed()),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: AppSpacing.sm),
+            const Icon(Icons.check_circle, size: 56, color: AppColors.success),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Transaksi berhasil disimpan',
+              style: text.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Flexible(
+              child: SingleChildScrollView(
+                child: TransactionReceipt(transaction: receipt),
               ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
+            const SizedBox(height: AppSpacing.xl),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Selesai'),
             ),
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Selesai'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    this.emphasized = false,
-  });
-
-  final String label;
-  final String value;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-
-    return Row(
-      children: [
-        Expanded(child: Text(label, style: text.bodyMedium)),
-        Text(
-          value,
-          style: emphasized
-              ? text.titleMedium?.copyWith(color: AppColors.primary)
-              : text.labelLarge,
+          ],
         ),
-      ],
+      ),
     );
   }
 }

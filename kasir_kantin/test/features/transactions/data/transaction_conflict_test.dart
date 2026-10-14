@@ -88,6 +88,29 @@ void main() {
     },
   );
 
+  test('getAll: semua status, terbaru dulu, tidak mengubah apa pun', () async {
+    final a = await sell(1);
+    final b = await sellConflict(2, 'Stok kurang B.');
+    final c = await sell(3);
+    await local.markSyncing(a);
+    await local.markSynced(a, serverId: 9, invoiceNumber: 'INV-SERVER-1');
+
+    final all = await local.getAll();
+
+    expect(all.map((t) => t.localUuid), [c, b, a]);
+    expect(all.map((t) => t.syncStatus), [
+      SyncStatus.pending,
+      SyncStatus.conflict,
+      SyncStatus.synced,
+    ]);
+    expect(all[1].syncMessage, 'Stok kurang B.');
+    expect(all[2].invoiceNumber, 'INV-SERVER-1');
+    expect(all[2].items.single.quantity, 1);
+    // Membaca tidak mengubah status maupun stok.
+    expect((await local.getAll()).length, 3);
+    expect(await stockOf(1), 10 - 1 - 3);
+  });
+
   test(
     'requeueConflict: conflict -> pending, isi tidak berubah, stok dikurangi lagi',
     () async {

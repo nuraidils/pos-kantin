@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../core/widgets/empty_state.dart';
 import '../features/cart/presentation/bloc/cart_bloc.dart';
 import '../features/products/domain/catalog_repository.dart';
 import '../features/products/presentation/bloc/catalog_bloc.dart';
@@ -10,13 +9,15 @@ import '../features/sync/presentation/bloc/sync_bloc.dart';
 import '../features/sync/presentation/widgets/sync_scheduler.dart';
 import '../features/sync/presentation/widgets/sync_status_banner.dart';
 import '../features/transactions/domain/transaction_repository.dart';
+import '../features/transactions/presentation/bloc/history_bloc.dart';
+import '../features/transactions/presentation/pages/history_page.dart';
 import 'settings_page.dart';
 
 /// Kerangka navigasi mobile: Kasir | Riwayat | Pengaturan (DESIGN.md §25,
 /// AGENTS.md §23). Bukan salinan sidebar dashboard.
-/// Tab Kasir = katalog + keranjang (tahap 8–9); tab Riwayat diganti di
-/// tahap berikutnya. SyncBloc (tahap 13) ikut hidup selama sesi masuk dan
-/// mengirim transaksi yang menunggu.
+/// Tab Kasir = katalog + keranjang (tahap 8–9); tab Riwayat = semua transaksi
+/// lokal dengan status sinkronisasinya (tahap 15). SyncBloc (tahap 13) ikut
+/// hidup selama sesi masuk dan mengirim transaksi yang menunggu.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -27,15 +28,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0; // state tampilan saja, bukan logika bisnis
 
-  static const _pages = <Widget>[
-    CatalogPage(),
-    EmptyState(
-      icon: Icons.receipt_long_outlined,
-      title: 'Belum ada transaksi',
-      message: 'Riwayat transaksi akan tampil di sini.',
-    ),
-    SettingsPage(),
-  ];
+  static const _pages = <Widget>[CatalogPage(), HistoryPage(), SettingsPage()];
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +43,11 @@ class _AppShellState extends State<AppShell> {
                 ..add(const CatalogStarted()),
         ),
         BlocProvider<CartBloc>(create: (_) => CartBloc()),
+        BlocProvider<HistoryBloc>(
+          create: (context) =>
+              HistoryBloc(repository: context.read<TransactionRepository>())
+                ..add(const HistoryLoaded()),
+        ),
         BlocProvider<SyncBloc>(
           create: (context) =>
               SyncBloc(repository: context.read<TransactionRepository>())
@@ -81,6 +79,13 @@ class _AppShellState extends State<AppShell> {
                 ..add(const CatalogRefreshed());
             },
           ),
+          // Status transaksi bergerak (menunggu -> menyinkronkan -> tersinkron,
+          // gagal, konflik) dan transaksi baru ikut dihitung: Riwayat dibaca
+          // ulang dari SQLite setiap SyncBloc berubah.
+          BlocListener<SyncBloc, SyncState>(
+            listener: (context, state) =>
+                context.read<HistoryBloc>().add(const HistoryLoaded()),
+          ),
           BlocListener<CartBloc, CartState>(
             listenWhen: (previous, current) =>
                 previous.noticeCount != current.noticeCount,
@@ -105,26 +110,37 @@ class _AppShellState extends State<AppShell> {
                 ],
               ),
             ),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: 'Kasir',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  selectedIcon: Icon(Icons.receipt_long),
-                  label: 'Riwayat',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings),
-                  label: 'Pengaturan',
-                ),
-              ],
+            // Builder: `context` milik State ini berada DI ATAS MultiBlocProvider
+            // di build(), jadi tidak bisa membaca HistoryBloc. Context dari
+            // Builder berada di bawahnya.
+            bottomNavigationBar: Builder(
+              builder: (context) => NavigationBar(
+                selectedIndex: _index,
+                onDestinationSelected: (i) {
+                  // Membuka Riwayat selalu menampilkan data terbaru.
+                  if (i == 1) {
+                    context.read<HistoryBloc>().add(const HistoryLoaded());
+                  }
+                  setState(() => _index = i);
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Kasir',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    selectedIcon: Icon(Icons.receipt_long),
+                    label: 'Riwayat',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings),
+                    label: 'Pengaturan',
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -155,8 +155,36 @@ class FakeTransactionRepository implements TransactionRepository {
   }
 
   @override
-  Future<LocalTransaction?> getTransaction(String localUuid) async =>
-      statuses.containsKey(localUuid) ? fakeTransaction(localUuid) : null;
+  Future<LocalTransaction?> getTransaction(String localUuid) async {
+    final status = statuses[localUuid];
+    if (status == null) return null;
+    return fakeTransaction(
+      localUuid,
+      status: status,
+      message: messages[localUuid],
+    );
+  }
+
+  /// Membuat pembacaan riwayat melempar galat.
+  bool allThrow = false;
+
+  /// Semua transaksi, terbaru dulu (kebalikan urutan penjualan di [statuses]).
+  @override
+  Future<List<LocalTransaction>> getAllTransactions() async {
+    calls.add('all');
+    if (allThrow) throw StateError('baca gagal');
+    var minute = 0;
+    final list = [
+      for (final entry in statuses.entries)
+        fakeTransaction(
+          entry.key,
+          minute: minute++,
+          status: entry.value,
+          message: messages[entry.key],
+        ),
+    ];
+    return list.reversed.toList();
+  }
 
   @override
   Future<LocalTransaction> createLocalTransaction({

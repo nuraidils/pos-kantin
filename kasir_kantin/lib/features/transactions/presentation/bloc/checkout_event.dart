@@ -26,3 +26,9 @@ final class CheckoutSubmitted extends CheckoutEvent {
   @override
   List<Object?> get props => [lines];
 }
+
+/// Membaca ulang transaksi yang baru dibayar dari SQLite agar struk mengikuti
+/// status sinkronisasi sebenarnya. Dikirim widget saat SyncBloc berubah.
+final class CheckoutReceiptRefreshed extends CheckoutEvent {
+  const CheckoutReceiptRefreshed();
+}

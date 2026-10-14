@@ -26,6 +26,9 @@ class TransactionRepositoryImpl implements TransactionRepository {
       _local.getByUuid(localUuid);
 
   @override
+  Future<List<LocalTransaction>> getAllTransactions() => _local.getAll();
+
+  @override
   Future<List<LocalTransaction>> getTransactionsToSync() =>
       _local.getSyncable();
 
