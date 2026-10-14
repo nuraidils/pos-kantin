@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../bloc/sync_bloc.dart';
+import '../pages/conflict_page.dart';
 
 /// Status transaksi yang belum tersinkron (DESIGN.md §19, §33). Tenang dan
 /// informatif: selalu ikon + teks, tidak pernah merah untuk keadaan offline
@@ -66,6 +67,8 @@ class SyncStatusBanner extends StatelessWidget {
               ),
               label: '${state.conflictCount} transaksi perlu perhatian',
               background: AppColors.warning.withValues(alpha: 0.12),
+              onTap: () => openConflictPage(context),
+              action: const Text('Lihat'),
             ),
           );
         }
@@ -100,8 +103,10 @@ class _Row extends StatelessWidget {
     required this.label,
     required this.background,
     this.action,
+    this.onTap,
   });
 
+  final VoidCallback? onTap;
   final Widget leading;
   final String label;
   final Color background;
@@ -111,23 +116,29 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: Row(
-        children: [
-          leading,
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(child: Text(label, style: text.bodySmall)),
-          ?action,
-        ],
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          constraints: BoxConstraints(minHeight: onTap == null ? 0 : 48),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              leading,
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text(label, style: text.bodySmall)),
+              ?action,
+              if (onTap != null) const Icon(Icons.chevron_right, size: 18),
+            ],
+          ),
+        ),
       ),
     );
   }

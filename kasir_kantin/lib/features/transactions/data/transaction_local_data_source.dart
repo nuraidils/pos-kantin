@@ -187,6 +187,17 @@ class TransactionLocalDataSource {
     return _withItems(_db, rows);
   }
 
+  /// Semua `conflict`, terbaru dulu. Tidak pernah ada yang dihapus: daftar ini
+  /// adalah satu-satunya cara kasir melihat transaksi yang ditolak server.
+  Future<List<LocalTransaction>> getConflicts() async {
+    final rows = await _db.query(
+      'transactions',
+      where: "sync_status = 'conflict'",
+      orderBy: 'created_at DESC, rowid DESC',
+    );
+    return _withItems(_db, rows);
+  }
+
   /// "Belum tersinkron" bagi kasir: belum diterima server dan masih akan dicoba.
   Future<int> countUnsynced() => _count("('pending', 'syncing', 'failed')");
 
@@ -271,6 +282,36 @@ class TransactionLocalDataSource {
         await txn.rawUpdate(
           '''
           UPDATE products SET stock = stock + COALESCE((
+            SELECT SUM(i.quantity) FROM transaction_items i
+            WHERE i.transaction_uuid = ? AND i.product_id = products.id
+          ), 0)
+          WHERE id IN (
+            SELECT product_id FROM transaction_items WHERE transaction_uuid = ?
+          )
+          ''',
+          [localUuid, localUuid],
+        );
+      }
+      return changed;
+    });
+  }
+
+  /// `conflict` -> `pending` atas permintaan kasir ("Kirim Ulang"). Isi
+  /// transaksi TIDAK diubah. Karena `pending` dikurangkan dari stok, stok
+  /// lokal dikurangi lagi di transaksi SQLite yang sama (kebalikan
+  /// [markConflict]). False bila statusnya bukan `conflict` lagi.
+  Future<bool> requeueConflict(String localUuid) {
+    return _db.transaction((txn) async {
+      final changed = await _transitionOn(
+        txn,
+        localUuid,
+        from: const [SyncStatus.conflict],
+        to: SyncStatus.pending,
+      );
+      if (changed) {
+        await txn.rawUpdate(
+          '''
+          UPDATE products SET stock = stock - COALESCE((
             SELECT SUM(i.quantity) FROM transaction_items i
             WHERE i.transaction_uuid = ? AND i.product_id = products.id
           ), 0)

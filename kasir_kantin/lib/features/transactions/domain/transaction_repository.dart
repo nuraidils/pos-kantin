@@ -27,6 +27,14 @@ abstract interface class TransactionRepository {
   /// Transaksi `conflict` yang menunggu perhatian kasir.
   Future<int> countConflictTransactions();
 
+  /// Transaksi `conflict` beserta alasannya (`syncMessage`), terbaru dulu.
+  Future<List<LocalTransaction>> getConflictTransactions();
+
+  /// Mengembalikan transaksi `conflict` ke `pending` agar dikirim lagi
+  /// (mis. stok server sudah ditambah). Isi transaksi tidak berubah dan stok
+  /// lokal dikurangi lagi. False bila statusnya bukan `conflict` lagi.
+  Future<bool> retryConflict(String localUuid);
+
   /// Mengirim satu transaksi dan mencatat hasilnya di SQLite. Aman dipanggil
   /// berulang atau bersamaan: hanya satu pemanggil yang benar-benar
   /// mengirim, dan server idempoten lewat `local_uuid` (Rule 5).

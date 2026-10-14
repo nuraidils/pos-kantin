@@ -36,6 +36,14 @@ class TransactionRepositoryImpl implements TransactionRepository {
   Future<int> countConflictTransactions() => _local.countConflicts();
 
   @override
+  Future<List<LocalTransaction>> getConflictTransactions() =>
+      _local.getConflicts();
+
+  @override
+  Future<bool> retryConflict(String localUuid) =>
+      _local.requeueConflict(localUuid);
+
+  @override
   Future<int> recoverInterruptedSyncs() => _local.resetInterruptedSyncs();
 
   @override

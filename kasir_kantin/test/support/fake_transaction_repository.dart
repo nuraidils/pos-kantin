@@ -7,23 +7,28 @@ import 'package:kasir_kantin/features/transactions/domain/sync_outcome.dart';
 import 'package:kasir_kantin/features/transactions/domain/sync_status.dart';
 import 'package:kasir_kantin/features/transactions/domain/transaction_repository.dart';
 
-LocalTransaction fakeTransaction(String uuid, {int minute = 0}) =>
-    LocalTransaction(
-      localUuid: uuid,
-      invoiceNumber: 'INV-$uuid',
-      totalAmount: 10000,
-      paymentMethod: PaymentMethod.cash,
-      syncStatus: SyncStatus.pending,
-      createdAt: DateTime.utc(2026, 10, 11, 2, minute),
-      items: const [
-        LocalTransactionItem(
-          productId: 1,
-          productName: 'Kopi Susu',
-          quantity: 1,
-          price: 10000,
-        ),
-      ],
-    );
+LocalTransaction fakeTransaction(
+  String uuid, {
+  int minute = 0,
+  SyncStatus status = SyncStatus.pending,
+  String? message,
+}) => LocalTransaction(
+  localUuid: uuid,
+  invoiceNumber: 'INV-$uuid',
+  totalAmount: 10000,
+  paymentMethod: PaymentMethod.cash,
+  syncStatus: status,
+  syncMessage: message,
+  createdAt: DateTime.utc(2026, 10, 11, 2, minute),
+  items: const [
+    LocalTransactionItem(
+      productId: 1,
+      productName: 'Kopi Susu',
+      quantity: 1,
+      price: 10000,
+    ),
+  ],
+);
 
 /// Repository palsu yang meniru perpindahan status yang sebenarnya: transaksi
 /// `pending`/`failed` boleh dikirim, hasil pengiriman mengubah statusnya, dan
@@ -43,6 +48,13 @@ class FakeTransactionRepository implements TransactionRepository {
 
   /// Catatan panggilan berurutan: `recover`, `queue`, `sync:<uuid>`.
   final List<String> calls = [];
+
+  /// Alasan konflik per UUID.
+  final Map<String, String> messages = {};
+
+  /// UUID yang melempar galat saat dikirim ulang dari daftar konflik.
+  bool retryThrows = false;
+  bool conflictsThrow = false;
 
   Object? recoverError;
   Object? queueError;
@@ -118,6 +130,29 @@ class FakeTransactionRepository implements TransactionRepository {
   @override
   Future<int> countConflictTransactions() async =>
       _count({SyncStatus.conflict});
+
+  @override
+  Future<List<LocalTransaction>> getConflictTransactions() async {
+    if (conflictsThrow) throw StateError('baca gagal');
+    return [
+      for (final entry in statuses.entries)
+        if (entry.value == SyncStatus.conflict)
+          fakeTransaction(
+            entry.key,
+            status: SyncStatus.conflict,
+            message: messages[entry.key],
+          ),
+    ];
+  }
+
+  @override
+  Future<bool> retryConflict(String localUuid) async {
+    calls.add('retry:$localUuid');
+    if (retryThrows) throw StateError('gagal');
+    if (statuses[localUuid] != SyncStatus.conflict) return false;
+    statuses[localUuid] = SyncStatus.pending;
+    return true;
+  }
 
   @override
   Future<LocalTransaction?> getTransaction(String localUuid) async =>

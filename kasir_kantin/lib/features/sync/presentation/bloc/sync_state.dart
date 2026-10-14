@@ -17,7 +17,7 @@ class SyncState extends Equatable {
   final int unsyncedCount;
 
   /// Transaksi `conflict`: tidak dikirim ulang dan tidak boleh hilang
-  /// diam-diam (AGENTS.md §13.4). Rinciannya menyusul di Tahap 14.
+  /// diam-diam (AGENTS.md §13.4). Rinciannya ada di ConflictPage.
   final int conflictCount;
 
   /// Putaran terakhir berhenti karena transaksi gagal dikirim (jaringan,
