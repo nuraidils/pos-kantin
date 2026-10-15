@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–15** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–16** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -1042,6 +1042,123 @@ Tes baru: `history_bloc_test`, `history_page_test`. Tes yang diperluas:
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
 yang muncul) ke chat.
 
+### 14. Tahap 16 — Dashboard Filament untuk owner
+
+Owner kini bisa mengelola **kategori** dan **produk (termasuk stok)** serta melihat
+**transaksi** dari dashboard web. Tahap ini hanya menyentuh `backend\`.
+Laporan dan statistik **bukan** bagian tahap ini (Tahap 17 dan 18).
+
+**Salin overlay:** isi folder `backend/` di paket ke `backend\` (timpa). Tidak ada
+paket Composer baru dan tidak ada migrasi. Lalu bersihkan cache:
+```powershell
+cd C:\DIL\pos-kantin\backend
+php artisan optimize:clear
+```
+
+**Tes otomatis** (di `backend\`):
+```powershell
+php artisan test
+```
+Tes baru ada di `tests/Feature/Admin/` (27 tes): akses, kategori, produk, transaksi,
+service stok, dan ringkasan dashboard.
+
+**Yang berubah**
+- Menu dashboard: **Dashboard · Produk · Kategori · Transaksi**, semuanya berbahasa
+  Indonesia. Waktu tampil dalam WIB.
+- **Dashboard:** tiga kartu "Hari Ini" (Omzet, Jumlah Transaksi, Stok Perlu Perhatian).
+  Widget bawaan Filament yang berbahasa Inggris dihapus.
+- **Kategori:** tambah, ubah nama, hapus (soft delete), pulihkan. Kategori yang
+  masih punya produk **tidak bisa dihapus**.
+- **Produk:** tambah (dengan foto dan stok awal), ubah nama/harga/kategori/foto/status
+  aktif, hapus (soft delete), pulihkan, filter, dan aksi **Ubah Stok**.
+  Stok **tidak** ada di formulir ubah. Ubah Stok memakai selisih (lihat Keputusan 26).
+- **Transaksi:** daftar dan detail, **hanya baca**. Tidak ada tombol tambah, ubah,
+  atau hapus. Filter metode pembayaran dan rentang tanggal.
+
+#### Uji manual (±20 menit)
+
+**Persiapan**
+1. Terminal server di `backend\`: `php artisan serve` (biarkan terbuka).
+2. Pastikan katalog ada. Bila masih kosong:
+   ```powershell
+   php artisan db:seed --class=CatalogSeeder
+   ```
+3. Pastikan `php artisan storage:link` pernah dijalankan (supaya foto produk tampil).
+4. Jalankan aplikasi di HP (`.\run_dev.cmd`) dan masuk sebagai kasir.
+
+**Skenario 1 — Masuk sebagai owner**
+1. Di browser laptop buka `http://127.0.0.1:8000/admin`.
+2. Masuk dengan akun owner (`owner@kantin.test`).
+3. Hasil yang benar: menu kiri berisi **Dashboard, Produk, Kategori, Transaksi**.
+   Dashboard menampilkan judul **Hari Ini** dengan tiga kartu: **Omzet**,
+   **Jumlah Transaksi**, **Stok Perlu Perhatian**. Tidak ada teks berbahasa Inggris
+   kecuali nama merek.
+4. Keluar, lalu coba masuk dengan akun kasir (`kasir@kantin.test`).
+   Hasil yang benar: tidak bisa membuka dashboard (halaman terlarang atau ditolak).
+   Masuk lagi sebagai owner untuk skenario berikutnya.
+
+**Skenario 2 — Kategori**
+1. Buka **Kategori** → **Tambah Kategori**. Isi `Kategori Uji` → simpan.
+   Hasil yang benar: muncul di daftar dengan **Jumlah Produk = 0**.
+2. Ketuk **Ubah** pada `Kategori Uji`, ganti nama menjadi `Kategori Uji 2` → simpan.
+   Hasil yang benar: nama berubah.
+3. Ketuk **Hapus** pada `Makanan`. Hasil yang benar: muncul peringatan
+   **Kategori tidak dapat dihapus** dan `Makanan` tetap ada.
+4. Ketuk **Hapus** pada `Kategori Uji 2` lalu konfirmasi **Hapus Kategori**.
+   Hasil yang benar: kategori hilang dari daftar.
+5. Buka filter **Kategori terhapus**, pilih tampilkan terhapus. Hasil yang benar:
+   `Kategori Uji 2` ada di sana dengan tombol **Pulihkan**.
+
+**Skenario 3 — Tambah produk dan lihat di HP**
+1. Buka **Produk** → **Tambah Produk**. Isi: kategori `Minuman`, nama `Teh Tarik Uji`,
+   harga `7000`, stok awal `4`, unggah satu foto, status aktif → simpan.
+2. Hasil yang benar: produk muncul di daftar dengan stok **Menipis (4)**.
+3. Di HP, **tutup aplikasi sepenuhnya lalu buka lagi** dan masuk.
+4. Hasil yang benar: tab Kasir menampilkan `Teh Tarik Uji` Rp7.000, dengan tulisan
+   `Stok tersisa 4`.
+
+**Skenario 4 — Ubah Stok**
+1. Di daftar Produk, ketuk **Ubah Stok** pada `Teh Tarik Uji`. Isi `10` → simpan.
+   Hasil yang benar: stok menjadi **14** (angka stok sebelumnya ditambah 10) dan
+   badge berubah menjadi hijau.
+2. Ketuk **Ubah Stok** lagi, isi `-20` → simpan.
+   Hasil yang benar: muncul **Stok tidak diubah** dengan alasan stok tidak boleh
+   kurang dari 0. Stok tetap 14.
+3. Ketuk **Ubah Stok**, isi `0`. Hasil yang benar: formulir menolak angka 0.
+4. Ketuk **Ubah** pada produk yang sama. Hasil yang benar: formulir **tidak**
+   punya kolom stok.
+
+**Skenario 5 — Hapus dan filter produk**
+1. Aktifkan filter **Stok menipis atau habis**. Hasil yang benar: hanya produk
+   dengan stok 5 atau kurang yang tampil (mis. Batagor **Habis**, Kopi Susu).
+2. Matikan filter. Ketuk **Hapus** pada `Teh Tarik Uji`.
+   Hasil yang benar: ada konfirmasi **Hapus Produk?** dengan tulisan
+   `Riwayat transaksi lama tetap aman`. Setelah konfirmasi, produk hilang dari daftar.
+3. Di HP, tutup aplikasi lalu buka lagi. Hasil yang benar: `Teh Tarik Uji` tidak
+   tampil lagi di tab Kasir.
+
+**Skenario 6 — Transaksi dari HP muncul di dashboard**
+1. Di HP, tab Kasir: bayar 2 buah `Es Teh Manis` dengan **Tunai**. Tunggu status
+   `Tersinkron` di tab Riwayat (maksimal 30 detik).
+2. Di dashboard buka **Transaksi**. Hasil yang benar: transaksi tadi paling atas,
+   dengan nomor invoice yang **sama** seperti di HP, kasir, metode **Tunai**, dan
+   total Rp10.000. Jam sesuai jam di HP (WIB).
+3. Ketuk **Lihat**. Hasil yang benar: rincian menampilkan `Es Teh Manis`,
+   jumlah 2, harga Rp5.000, subtotal Rp10.000. Tidak ada tombol ubah atau hapus.
+4. Buka filter **Metode Pembayaran** → **QRIS**. Hasil yang benar: transaksi tunai
+   tadi tidak tampil. Kembalikan filter ke semua.
+5. Buka **Dashboard**. Hasil yang benar: **Omzet** dan **Jumlah Transaksi** hari ini
+   sudah bertambah sesuai transaksi tadi.
+
+**Skenario 7 — Harga lama tidak berubah (snapshot)**
+1. Di **Produk**, ubah harga `Es Teh Manis` dari 5000 menjadi `6000` → simpan.
+2. Buka lagi detail transaksi dari Skenario 6.
+3. Hasil yang benar: harga di rincian transaksi tetap **Rp5.000** (bukan Rp6.000).
+4. Kembalikan harga `Es Teh Manis` ke `5000`.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -1075,6 +1192,9 @@ yang muncul) ke chat.
   satu waktu, berhenti di kegagalan pertama), `SyncScheduler` (timer 30 detik dan
   saat aplikasi dibuka kembali), dan `SyncStatusBanner`. `AppShell` merangkainya;
   sheet pembayaran memicu pengiriman begitu transaksi tersimpan.
+- Tahap 16: dashboard Filament di `backend/app/Filament/` (Resource Kategori, Produk,
+  Transaksi, widget `RingkasanHariIni`), `ProductService` (ubah stok dengan selisih),
+  `CategoryService` (slug unik), `DashboardSummaryService`, dan `SetAdminLocale`.
 - Tahap 15: `HistoryBloc` + `HistoryPage` (tab Riwayat dan Detail Transaksi),
   `SyncStatusChip` (label status), `TransactionReceipt` (rincian yang dipakai
   struk dan detail), `getAllTransactions` di repository, dan `CheckoutReceiptRefreshed`
@@ -1186,13 +1306,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` |
 | 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` (sudah dipakai) |
 | 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` (sudah dipakai) |
-| 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` |
+| 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` (sudah dipakai) |
+| 16 | `feat(backend): dashboard filament untuk kategori, produk, dan transaksi` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi"
+git commit -m "feat(backend): dashboard filament untuk kategori, produk, dan transaksi"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1245,10 +1366,11 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 7. Autentikasi Flutter ✔ → 8. Katalog produk + sinkronisasi pull ✔ →
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
-14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16–18. Filament, laporan, statistik.
+14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16. Dashboard Filament ✔ →
+17. Laporan → 18. Statistik.
 
-Catatan untuk Tahap 16: dashboard Filament untuk owner (produk, kategori, transaksi).
-Pengurangan jumlah atau pembatalan transaksi konflik (lihat Keputusan 17) dibahas di sana.
+Catatan untuk Tahap 17: halaman **Laporan** (rentang tanggal, omzet, jumlah transaksi,
+rata-rata transaksi, daftar transaksi, rincian per metode pembayaran).
 
 ## Keputusan Tahap 14
 17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
@@ -1272,3 +1394,31 @@ Pengurangan jumlah atau pembatalan transaksi konflik (lihat Keputusan 17) dibaha
     Perlu Perhatian (satu tempat), supaya aturan Tahap 14 tidak terpecah dua.
 24. **Semua transaksi dimuat sekaligus.** Cukup untuk volume kantin; bila daftar
     kelak terasa lambat, tambahkan pemuatan bertahap atau filter tanggal.
+
+## Keputusan Tahap 16
+25. **Transaksi di dashboard hanya baca.** Transaksi lahir di perangkat kasir dan masuk
+    lewat API yang idempoten dan atomik dengan stok. Mengubah atau menghapusnya dari
+    dashboard akan merusak jejak penjualan dan stok (AGENTS.md §9, §13).
+26. **Stok diubah dengan selisih, bukan ditimpa.** Stok server juga berubah oleh
+    transaksi kasir. Formulir ubah yang dibiarkan terbuka lalu disimpan akan menimpa
+    penjualan yang terjadi di sela-selanya. Stok hanya diisi saat produk dibuat
+    ("Stok Awal"); sesudahnya lewat aksi **Ubah Stok** (+/-) yang mengunci baris dan
+    menolak hasil di bawah 0.
+27. **Kategori yang masih punya produk tidak bisa dihapus.** Produk dengan kategori
+    terhapus akan membingungkan katalog di HP. Produk juga tidak bisa dipulihkan
+    selama kategorinya masih terhapus.
+28. **Slug kategori dibuat server** dan tidak berubah saat nama diganti. Bila bentrok
+    (termasuk dengan kategori terhapus, karena kolom UNIQUE mencakupnya) diberi akhiran
+    `-2`, `-3`.
+29. **Tidak ada hapus permanen** dari dashboard (tanpa Force Delete), sesuai soft delete
+    di AGENTS.md §14.
+30. **Waktu tampil WIB, penyimpanan tetap UTC.** "Hari ini" di dashboard adalah hari
+    kalender WIB.
+31. **Batas "stok menipis" = 5**, sama dengan `Product.lowStockThreshold` di Flutter.
+    Ada di dua tempat (`Product::LOW_STOCK_THRESHOLD`); ubah keduanya bersamaan.
+32. **Perubahan owner sampai ke HP lewat sinkronisasi katalog** (saat aplikasi dibuka,
+    dan setelah ada transaksi yang tersinkron), bukan seketika.
+33. **Ditunda:** sidebar teal tua dan font kustom (butuh tema Filament dan build npm)
+    masuk Tahap 19 (pemolesan UI). Pembatalan atau pengurangan jumlah transaksi
+    `conflict` (Keputusan 17) belum ada: server tidak pernah menerima transaksi konflik,
+    jadi owner belum melihatnya di dashboard.
