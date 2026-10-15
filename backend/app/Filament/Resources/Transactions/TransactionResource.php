@@ -178,15 +178,10 @@ class TransactionResource extends Resource
             ->emptyStateDescription('Transaksi dari aplikasi kasir akan tampil di sini setelah tersinkron.');
     }
 
-    /**
-     * Awal hari (zona tampilan) sebagai waktu UTC, karena kolom `created_at`
-     * disimpan UTC. Tanggal dari filter adalah tanggal menurut owner (WIB).
-     */
+    /** Awal hari menurut WIB sebagai waktu UTC (kolom `created_at` disimpan UTC). */
     protected static function dayStartUtc(string $date): Carbon
     {
-        return Carbon::parse($date, DisplayTimezone::NAME)
-            ->startOfDay()
-            ->setTimezone(config('app.timezone'));
+        return DisplayTimezone::startOfDayUtc($date);
     }
 
     public static function getPages(): array

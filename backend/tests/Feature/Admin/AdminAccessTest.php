@@ -24,13 +24,14 @@ class AdminAccessTest extends TestCase
         $this->actingAs($kasir)->get('/admin')->assertForbidden();
         $this->actingAs($kasir)->get('/admin/products')->assertForbidden();
         $this->actingAs($kasir)->get('/admin/transactions')->assertForbidden();
+        $this->actingAs($kasir)->get('/admin/laporan')->assertForbidden();
     }
 
     public function test_owner_dapat_membuka_semua_halaman(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);
 
-        foreach (['/admin', '/admin/products', '/admin/products/create', '/admin/categories', '/admin/transactions'] as $path) {
+        foreach (['/admin', '/admin/products', '/admin/products/create', '/admin/categories', '/admin/transactions', '/admin/laporan'] as $path) {
             $this->actingAs($owner)->get($path)->assertOk();
         }
     }
