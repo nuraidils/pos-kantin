@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Support\DisplayTimezone;
+use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Waktu di dashboard tampil dalam WIB; penyimpanan tetap UTC.
+        FilamentTimezone::set(DisplayTimezone::NAME);
     }
 }

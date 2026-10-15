@@ -2,6 +2,8 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\RingkasanHariIni;
+use App\Http\Middleware\SetAdminLocale;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -10,8 +12,6 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -39,10 +39,14 @@ class AdminPanelProvider extends PanelProvider
                 Dashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
+            // Dashboard hanya berisi ringkasan hari ini. Widget bawaan (akun dan
+            // tautan dokumentasi Filament) berbahasa Inggris dan tidak berguna
+            // bagi owner. Laporan dan statistik punya halaman sendiri (tahap 17-18).
             ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
+                RingkasanHariIni::class,
             ])
+            // Persisten: request Livewire (klik, filter, modal) juga berbahasa Indonesia.
+            ->middleware([SetAdminLocale::class], isPersistent: true)
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
