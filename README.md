@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–16** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–17** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -1094,7 +1094,9 @@ service stok, dan ringkasan dashboard.
    **Jumlah Transaksi**, **Stok Perlu Perhatian**. Tidak ada teks berbahasa Inggris
    kecuali nama merek.
 4. Keluar, lalu coba masuk dengan akun kasir (`kasir@kantin.test`).
-   Hasil yang benar: tidak bisa membuka dashboard (halaman terlarang atau ditolak).
+   Hasil yang benar: tidak bisa masuk. Filament menampilkan pesan umum
+   **Kredensial yang diberikan tidak dapat ditemukan.** (sengaja tidak membedakan
+   "akun tidak ada" dan "bukan owner", supaya tidak membocorkan akun mana yang valid).
    Masuk lagi sebagai owner untuk skenario berikutnya.
 
 **Skenario 2 — Kategori**
@@ -1159,6 +1161,104 @@ service stok, dan ringkasan dashboard.
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
 yang muncul) ke chat.
 
+### 15. Tahap 17 — Laporan penjualan untuk owner
+
+Halaman **Laporan** di dashboard: owner memilih rentang tanggal, lalu melihat omzet,
+jumlah transaksi, rata-rata per transaksi, daftar transaksi, dan rincian per metode
+pembayaran (AGENTS.md §25). Tahap ini hanya menyentuh `backend\`. Grafik, tren, dan
+produk terlaris **bukan** bagian tahap ini (Tahap 18, Statistik).
+
+**Salin overlay:** isi folder `backend/` di paket ke `backend\` (timpa). Tidak ada
+paket Composer baru dan tidak ada migrasi. Lalu:
+```powershell
+cd C:\DIL\pos-kantin\backend
+php artisan optimize:clear
+```
+
+**Tes otomatis** (di `backend\`):
+```powershell
+php artisan test
+```
+Tes baru: `tests/Feature/Admin/LaporanTest.php` (7 tes: total, rata-rata, rincian metode,
+periode kosong, batas tanggal WIB, tanggal terbalik/tidak valid, akses owner/kasir) dan
+`AdminAccessTest` diperluas dengan `/admin/laporan`.
+
+**Yang berubah**
+- Menu baru **Laporan** (urutan: Dashboard · Produk · Kategori · Transaksi · Laporan).
+- Filter **Dari tanggal** dan **Sampai tanggal**. Bawaan: tanggal 1 bulan ini sampai
+  hari ini (WIB). Kedua tanggal ikut dihitung penuh.
+- Isi halaman berurutan: Ringkasan (Total Omzet, Jumlah Transaksi, Rata-rata per
+  Transaksi) → Daftar Transaksi → Rincian Metode Pembayaran (Tunai dan QRIS: total,
+  jumlah transaksi, persen dari omzet).
+- Hanya transaksi yang **sudah diterima server** yang dihitung.
+
+#### Uji manual (±15 menit)
+
+**Persiapan**
+1. Terminal server di `backend\`: `php artisan serve`.
+2. Jalankan aplikasi di HP (`.\run_dev.cmd`), masuk sebagai kasir.
+3. Di HP buat 2 transaksi hari ini: satu **Tunai** dan satu **QRIS** (barang bebas).
+   Tunggu keduanya `Tersinkron` di tab Riwayat.
+4. Di browser buka `http://127.0.0.1:8000/admin` dan masuk sebagai owner.
+
+**Skenario 1 — Halaman Laporan dan nilai bawaan**
+1. Klik menu **Laporan**.
+2. Hasil yang benar: ada kotak **Filter Tanggal** (Dari tanggal = tanggal 1 bulan ini,
+   Sampai tanggal = hari ini), judul **Ringkasan: 1 ... - ...** sesuai rentang itu,
+   tiga kartu ringkasan, tabel **Daftar Transaksi**, lalu **Rincian Metode Pembayaran**.
+   Tidak ada teks berbahasa Inggris.
+
+**Skenario 2 — Angka cocok dengan Dashboard**
+1. Ubah **Dari tanggal** dan **Sampai tanggal** keduanya menjadi hari ini.
+2. Hasil yang benar: **Total Omzet** dan **Jumlah Transaksi** sama dengan kartu
+   **Omzet** dan **Jumlah Transaksi** di halaman Dashboard (Hari Ini).
+3. **Rata-rata per Transaksi** = Total Omzet dibagi Jumlah Transaksi (dibulatkan).
+4. Tabel hanya berisi transaksi hari ini, yang terbaru di atas.
+
+**Skenario 3 — Rincian metode pembayaran**
+1. Masih rentang hari ini, lihat **Rincian Metode Pembayaran**.
+2. Hasil yang benar: kartu **Tunai** dan **QRIS** masing-masing menampilkan total
+   dan teks seperti `1 transaksi · 40% dari omzet`. Total Tunai + total QRIS =
+   Total Omzet, dan jumlah transaksinya juga cocok.
+
+**Skenario 4 — Periode tanpa transaksi**
+1. Pilih rentang yang pasti kosong, mis. `1/1/2020` sampai `31/1/2020`.
+2. Hasil yang benar: semua kartu menampilkan **Rp0** / **0**, rata-rata Rp0, persen
+   0%, dan tabel berisi **Tidak ada transaksi pada periode ini**. Tidak ada error.
+
+**Skenario 5 — Buka detail dari daftar**
+1. Kembalikan rentang ke hari ini. Ketuk satu baris transaksi di tabel.
+2. Hasil yang benar: terbuka halaman detail transaksi yang sama seperti di menu
+   **Transaksi** (hanya baca), dengan nomor invoice yang sama seperti di HP.
+
+**Skenario 6 — Transaksi konflik diselesaikan lewat Ubah Stok → Kirim Ulang**
+Ini menunjukkan jalan keluar konflik yang disepakati (Keputusan 17 dan 33): owner
+menambah stok, kasir mengirim ulang.
+1. Catat **Jumlah Transaksi** hari ini di Laporan (`J`).
+2. Matikan server (`Ctrl+C`). Di HP bayar **3** buah `Nasi Goreng` (Tunai).
+3. Di terminal `backend\`, habiskan stok server:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::where('name','Nasi Goreng')->update(['stock'=>0]);"
+   ```
+4. Nyalakan server lagi. Tunggu sampai 30 detik. Hasil yang benar: banner
+   `1 transaksi perlu perhatian` di HP.
+5. Di dashboard buka **Laporan**, muat ulang halaman. Hasil yang benar: Jumlah
+   Transaksi masih `J` (transaksi konflik belum ada di server).
+6. Di dashboard buka **Produk**, ketuk **Ubah Stok** pada `Nasi Goreng`, isi
+   **Perubahan Stok** `20`, **Simpan**. Hasil yang benar: stok menjadi 20.
+7. Di HP buka banner → **Perlu Perhatian** → **Kirim Ulang**. Hasil yang benar:
+   kartu hilang dalam beberapa detik.
+8. Muat ulang **Laporan**. Hasil yang benar: Jumlah Transaksi menjadi `J + 1`, dan
+   transaksi Nasi Goreng tadi muncul di tabel.
+
+**Skenario 7 — Tanggal terbalik tidak merusak laporan**
+1. Isi **Dari tanggal** = hari ini dan **Sampai tanggal** = tanggal 1 bulan ini.
+2. Hasil yang benar: halaman tidak error; rentang otomatis dibaca dari yang lebih
+   awal ke yang lebih akhir (judul Ringkasan menampilkan rentang yang benar).
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -1195,6 +1295,10 @@ yang muncul) ke chat.
 - Tahap 16: dashboard Filament di `backend/app/Filament/` (Resource Kategori, Produk,
   Transaksi, widget `RingkasanHariIni`), `ProductService` (ubah stok dengan selisih),
   `CategoryService` (slug unik), `DashboardSummaryService`, dan `SetAdminLocale`.
+- Tahap 17: halaman `Laporan` (`app/Filament/Pages/`), tiga widget `LaporanRingkasan`,
+  `LaporanDaftarTransaksi`, `LaporanMetodePembayaran`, dan `ReportService`
+  (rentang tanggal WIB → UTC, ringkasan, rincian metode). `DisplayTimezone::startOfDayUtc`
+  kini dipakai bersama oleh filter Transaksi dan Laporan.
 - Tahap 15: `HistoryBloc` + `HistoryPage` (tab Riwayat dan Detail Transaksi),
   `SyncStatusChip` (label status), `TransactionReceipt` (rincian yang dipakai
   struk dan detail), `getAllTransactions` di repository, dan `CheckoutReceiptRefreshed`
@@ -1307,13 +1411,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` (sudah dipakai) |
 | 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` (sudah dipakai) |
 | 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` (sudah dipakai) |
-| 16 | `feat(backend): dashboard filament untuk kategori, produk, dan transaksi` |
+| 16 | `feat(backend): dashboard filament untuk kategori, produk, dan transaksi` (sudah dipakai) |
+| 17 | `feat(backend): halaman laporan penjualan dengan filter tanggal` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(backend): dashboard filament untuk kategori, produk, dan transaksi"
+git commit -m "feat(backend): halaman laporan penjualan dengan filter tanggal"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1367,10 +1472,10 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
 14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16. Dashboard Filament ✔ →
-17. Laporan → 18. Statistik.
+17. Laporan ✔ → 18. Statistik.
 
-Catatan untuk Tahap 17: halaman **Laporan** (rentang tanggal, omzet, jumlah transaksi,
-rata-rata transaksi, daftar transaksi, rincian per metode pembayaran).
+Catatan untuk Tahap 18: halaman **Statistik** (tren, produk terlaris, jam ramai) tanpa
+menduplikasi Laporan (AGENTS.md §25).
 
 ## Keputusan Tahap 14
 17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
@@ -1422,3 +1527,21 @@ rata-rata transaksi, daftar transaksi, rincian per metode pembayaran).
     masuk Tahap 19 (pemolesan UI). Pembatalan atau pengurangan jumlah transaksi
     `conflict` (Keputusan 17) belum ada: server tidak pernah menerima transaksi konflik,
     jadi owner belum melihatnya di dashboard.
+
+## Keputusan Tahap 17
+34. **Laporan = data historis pada rentang tanggal; Statistik = tren dan peringkat.**
+    Laporan tidak memuat grafik atau produk terlaris, supaya tidak menduplikasi Tahap 18.
+35. **Tanggal adalah hari kalender WIB**, dikonversi ke batas UTC (awal hari dari
+    tanggal, akhir eksklusif). Transaksi pukul 23.59 WIB masuk hari itu, 00.00 WIB hari
+    berikutnya. Logika konversi satu tempat: `DisplayTimezone::startOfDayUtc`.
+36. **Hanya transaksi yang sudah diterima server yang dihitung.** Transaksi `conflict`
+    atau belum tersinkron hanya ada di HP, jadi belum masuk omzet (Keputusan 33). Ini
+    dinyatakan di kartu Total Omzet.
+37. **Rata-rata = omzet dibagi jumlah transaksi, dibulatkan ke rupiah;** 0 bila tidak ada
+    transaksi. Persen metode dibulatkan, jadi jumlahnya bisa 99% atau 101%.
+38. **Input tanggal dibuat tahan salah:** kosong atau tidak valid memakai bawaan (awal
+    bulan sampai hari ini), terbalik ditukar. Laporan tidak pernah error karena filter.
+39. **Filter tidak diingat antar kunjungan;** selalu mulai dari bulan berjalan.
+40. **Pesan gagal masuk kasir di `/admin` tetap bawaan Filament** ("Kredensial yang
+    diberikan tidak dapat ditemukan."). Sengaja umum agar tidak membocorkan akun; README
+    Tahap 16 diperbaiki mengikuti ini.
