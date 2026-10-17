@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–17** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–18** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan, statistik).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -1259,6 +1259,107 @@ menambah stok, kasir mengirim ulang.
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
 yang muncul) ke chat.
 
+### 16. Tahap 18 — Statistik untuk owner
+
+Halaman **Statistik** di dashboard menjawab tiga pertanyaan (DESIGN.md §30): *apa yang
+paling laku*, *bagaimana performa akhir-akhir ini*, dan *produk apa yang perlu
+diperhatikan*. Tahap ini hanya menyentuh `backend\`. Statistik **tidak** memakai
+rentang tanggal bebas: itu tugas Laporan (AGENTS.md §25), jadi isinya tidak dobel.
+
+**Salin overlay:** isi folder `backend/` di paket ke `backend\` (timpa). Tidak ada
+paket Composer baru, tidak ada migrasi. Lalu:
+```powershell
+cd C:\DIL\pos-kantin\backend
+php artisan optimize:clear
+```
+
+**Tes otomatis** (di `backend\`):
+```powershell
+php artisan test
+```
+Tes baru: `tests/Feature/Admin/StatistikTest.php` (11 tes: periode, tren dan hari kosong,
+perbandingan, hari/jam tersibuk, produk terlaris, produk terhapus, stok perhatian,
+akses, render halaman) dan `AdminAccessTest` diperluas dengan `/admin/statistik`.
+
+**Yang berubah**
+- Menu baru **Statistik** (urutan: Dashboard · Produk · Kategori · Transaksi · Laporan · Statistik).
+- Pilihan **Periode**: 7 hari terakhir (bawaan) atau 30 hari terakhir, dihitung mundur
+  dari hari ini (WIB).
+- **Performa:** Omzet N hari terakhir beserta perbandingan dengan N hari sebelumnya
+  (naik/turun dalam persen), **Hari Tersibuk**, dan **Jam Tersibuk**.
+- **Tren Omzet Harian:** grafik garis omzet per hari. Hari tanpa penjualan tampil Rp0.
+- **Produk Terlaris:** 5 produk dengan jumlah terjual terbanyak, beserta omzetnya.
+- **Stok Perlu Perhatian:** daftar produk aktif yang **Habis** atau **Menipis** (stok 5
+  ke bawah).
+- Hanya transaksi yang **sudah diterima server** yang dihitung.
+
+#### Uji manual (±20 menit)
+
+**Persiapan**
+1. Terminal server di `backend\`: `php artisan serve`.
+2. Jalankan aplikasi di HP (`.\run_dev.cmd`), masuk sebagai kasir.
+3. Di browser buka `http://127.0.0.1:8000/admin`, masuk sebagai owner, lalu klik
+   **Statistik**. Catat dua angka untuk Skenario 2: nilai **Terjual** untuk
+   `Nasi Goreng` di tabel **Produk Terlaris** (`A`; bila `Nasi Goreng` belum ada di
+   tabel, `A = 0`).
+
+**Skenario 1 — Tampilan halaman**
+1. Di halaman **Statistik** lihat urutan isi.
+2. Hasil yang benar: kotak **Periode** (pilihan `7 hari terakhir`), judul
+   **Performa: ... - ...** (rentang 7 hari sampai hari ini), tiga kartu
+   (**Omzet 7 Hari Terakhir**, **Hari Tersibuk**, **Jam Tersibuk**), grafik
+   **Tren Omzet Harian** dengan 7 titik, lalu dua tabel berdampingan
+   **Produk Terlaris** dan **Stok Perlu Perhatian**. Tidak ada teks berbahasa Inggris.
+3. Hasil yang benar: **Jam Tersibuk** berformat seperti `12.00 - 13.00`, dan
+   **Hari Tersibuk** berupa nama hari (mis. `Kamis`).
+
+**Skenario 2 — Produk terlaris mengikuti penjualan**
+1. Di HP, tab Kasir: bayar **2** buah `Nasi Goreng` dengan **Tunai**. Tunggu status
+   `Tersinkron` di tab Riwayat (maksimal 30 detik).
+2. Di dashboard, muat ulang halaman **Statistik**.
+3. Hasil yang benar: **Terjual** untuk `Nasi Goreng` menjadi `A + 2`. Titik hari ini
+   di grafik tren dan **Omzet 7 Hari Terakhir** ikut naik sesuai penjualan tadi
+   (2 × harga Nasi Goreng).
+
+**Skenario 3 — Ganti periode**
+1. Ubah **Tampilkan** menjadi `30 hari terakhir`.
+2. Hasil yang benar: judul **Performa** menampilkan rentang 30 hari, kartu berubah
+   menjadi **Omzet 30 Hari Terakhir**, grafik tren berisi 30 titik, dan omzet 30 hari
+   tidak lebih kecil dari omzet 7 hari tadi.
+3. Kembalikan ke `7 hari terakhir`. Hasil yang benar: tampilan kembali seperti
+   Skenario 1.
+
+**Skenario 4 — Stok perlu perhatian**
+1. Di terminal `backend\`, buat stok menipis:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::where('name','Nasi Goreng')->update(['stock'=>3]);"
+   ```
+2. Muat ulang **Statistik**. Hasil yang benar: `Nasi Goreng` ada di **Stok Perlu
+   Perhatian** dengan stok `3` dan status **Menipis** (kuning).
+3. Habiskan stok:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::where('name','Nasi Goreng')->update(['stock'=>0]);"
+   ```
+   Muat ulang. Hasil yang benar: stok `0`, status **Habis** (merah), dan `Nasi Goreng`
+   berada di atas produk yang hanya menipis.
+4. Kembalikan stok:
+   ```powershell
+   php artisan tinker --execute="App\Models\Product::where('name','Nasi Goreng')->update(['stock'=>20]);"
+   ```
+   Muat ulang. Hasil yang benar: `Nasi Goreng` hilang dari daftar. Bila tidak ada produk
+   lain yang menipis, tabel menampilkan **Semua stok aman**.
+5. Buka **Dashboard**. Hasil yang benar: kartu **Stok Perlu Perhatian** menghitung
+   produk yang sama dengan tabel tadi (jumlah habis + menipis).
+
+**Skenario 5 — Statistik berbeda dari Laporan**
+1. Buka **Laporan**. Hasil yang benar: ada filter **Dari tanggal / Sampai tanggal**,
+   daftar transaksi, dan rincian Tunai/QRIS; **tidak** ada grafik atau produk terlaris.
+2. Buka **Statistik**. Hasil yang benar: ada grafik tren, produk terlaris, dan stok;
+   **tidak** ada filter tanggal bebas dan tidak ada daftar transaksi.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -1295,6 +1396,10 @@ yang muncul) ke chat.
 - Tahap 16: dashboard Filament di `backend/app/Filament/` (Resource Kategori, Produk,
   Transaksi, widget `RingkasanHariIni`), `ProductService` (ubah stok dengan selisih),
   `CategoryService` (slug unik), `DashboardSummaryService`, dan `SetAdminLocale`.
+- Tahap 18: halaman `Statistik` (`app/Filament/Pages/`), widget `StatistikPerforma`,
+  `StatistikTren` (grafik), `StatistikProdukTerlaris`, `StatistikStokPerhatian`, dan
+  `StatistikService` (jendela N hari WIB, tren, perbandingan, jam/hari tersibuk,
+  produk terlaris, stok perhatian).
 - Tahap 17: halaman `Laporan` (`app/Filament/Pages/`), tiga widget `LaporanRingkasan`,
   `LaporanDaftarTransaksi`, `LaporanMetodePembayaran`, dan `ReportService`
   (rentang tanggal WIB → UTC, ringkasan, rincian metode). `DisplayTimezone::startOfDayUtc`
@@ -1412,13 +1517,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` (sudah dipakai) |
 | 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` (sudah dipakai) |
 | 16 | `feat(backend): dashboard filament untuk kategori, produk, dan transaksi` (sudah dipakai) |
-| 17 | `feat(backend): halaman laporan penjualan dengan filter tanggal` |
+| 17 | `feat(backend): halaman laporan penjualan dengan filter tanggal` (sudah dipakai) |
+| 18 | `feat(backend): halaman statistik tren, produk terlaris, dan stok` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(backend): halaman laporan penjualan dengan filter tanggal"
+git commit -m "feat(backend): halaman statistik tren, produk terlaris, dan stok"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1472,10 +1578,10 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
 14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16. Dashboard Filament ✔ →
-17. Laporan ✔ → 18. Statistik.
+17. Laporan ✔ → 18. Statistik ✔ → 19. Pemolesan UI → 20. Pengujian dan integrasi akhir.
 
-Catatan untuk Tahap 18: halaman **Statistik** (tren, produk terlaris, jam ramai) tanpa
-menduplikasi Laporan (AGENTS.md §25).
+Catatan untuk Tahap 19: sidebar teal tua dan font kustom di dashboard (Keputusan 33),
+serta merapikan tampilan di HP dan dashboard sesuai DESIGN.md.
 
 ## Keputusan Tahap 14
 17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
@@ -1545,3 +1651,26 @@ menduplikasi Laporan (AGENTS.md §25).
 40. **Pesan gagal masuk kasir di `/admin` tetap bawaan Filament** ("Kredensial yang
     diberikan tidak dapat ditemukan."). Sengaja umum agar tidak membocorkan akun; README
     Tahap 16 diperbaiki mengikuti ini.
+
+## Keputusan Tahap 18
+41. **Statistik memakai "N hari terakhir" (7 atau 30), bukan rentang tanggal bebas.**
+    Rentang bebas adalah milik Laporan; dengan begitu dua halaman tidak menampilkan hal
+    yang sama (AGENTS.md §25). Pilihan tak dikenal jatuh ke 7 hari.
+42. **Omzet dibandingkan dengan N hari tepat sebelumnya**, dalam persen yang dibulatkan.
+    Bila periode pembanding kosong, tidak ada persen (bukan "naik tak terhingga").
+43. **Hari dan jam tersibuk dihitung dari jumlah transaksi**, memakai jam WIB. Bila seri,
+    yang lebih awal dipilih (Senin sebelum Selasa, jam lebih pagi).
+44. **Produk terlaris menurut jumlah terjual** (5 teratas; seri: omzet, lalu nama). Nama
+    diambil dari snapshot item transaksi, jadi produk yang sudah dihapus tetap tampil
+    (konsisten dengan AGENTS.md §9).
+45. **Stok perlu perhatian = produk aktif dengan stok 5 ke bawah** (`Product::LOW_STOCK_THRESHOLD`).
+    Kartu hitungan di Dashboard tetap ada; tabel di Statistik menunjukkan produk mana.
+    Stok tetap diubah lewat menu Produk (Keputusan 26), bukan dari Statistik.
+46. **Pengelompokan per hari dan jam dikerjakan di PHP**, bukan SQL, supaya tidak
+    bergantung fungsi zona waktu database (SQLite di tes, MySQL di produksi). Volume
+    kantin kecil, jadi aman.
+47. **Hanya satu grafik (tren omzet).** DESIGN.md §28 melarang grafik dekoratif; jam dan
+    hari tersibuk cukup berupa kartu.
+48. **Properti trait Filament tidak ditimpa dengan nilai lain.** Bug Tahap 17
+    (`$persistsFiltersInSession`) diperbaiki dengan menimpa method-nya; halaman Statistik
+    memakai cara yang sama.
