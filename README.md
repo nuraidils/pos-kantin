@@ -1,10 +1,10 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–18** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–19** dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan, statistik).
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan, statistik, pemolesan UI).
 Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
 lapisan baru.
 
@@ -1360,6 +1360,114 @@ akses, render halaman) dan `AdminAccessTest` diperluas dengan `/admin/statistik`
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
 yang muncul) ke chat.
 
+### 17. Tahap 19 — Pemolesan UI
+
+Dua bagian: **dashboard** (tema teal sesuai DESIGN.md) dan **aplikasi kasir** (hasil
+audit terhadap DESIGN.md, lalu perbaikan gerak dan aksesibilitas). Tidak ada fitur
+baru, tidak ada perubahan alur, API, atau database.
+
+**Hasil audit Flutter.** Sudah sesuai DESIGN.md dan tidak diubah: seluruh teks
+berbahasa Indonesia, area sentuh minimal 44–48, status stok berupa ikon + teks
+(bukan warna saja), tombol bayar tidak bisa diketuk dua kali, katalog memakai skeleton,
+dan produk habis tidak bisa dipilih. Yang kurang dan diperbaiki: **gerak** (§38) dan
+**aksesibilitas** (§37).
+
+**Salin overlay:** isi folder `backend/` ke `backend\` dan isi folder `mobile/` ke
+`kasir_kantin\` (timpa).
+
+**Langkah backend** (satu kali, butuh Node.js dan internet):
+```powershell
+cd C:\DIL\pos-kantin\backend
+npm install
+npm run build
+php artisan optimize:clear
+```
+`npm install` menambah paket font Inter dan membuat `package-lock.json` (ikut di-commit).
+Hasil build ada di `public\build` dan **tidak** masuk Git, jadi `npm run build` harus
+diulang di setiap komputer baru atau setelah `theme.css` berubah.
+
+**Tes otomatis**
+```powershell
+cd C:\DIL\pos-kantin\backend
+php artisan test
+
+cd C:\DIL\pos-kantin\kasir_kantin
+flutter analyze
+flutter test
+```
+Tes baru: `test/core/widgets/value_pulse_test.dart` (4 tes) dan
+`test/features/products/presentation/product_card_test.dart` (3 tes). Tes Laravel
+sekarang mematikan Vite di `tests/TestCase.php`, jadi tidak bergantung pada hasil build.
+
+**Yang berubah**
+- Dashboard: bilah atas dan sidebar teal tua (`#0F4540`), menu aktif teal sekunder
+  (`#287B72`) dengan garis coral kecil di kiri, latar halaman `#F7F8F5`, judul halaman
+  teal tua, grafik tren berwarna teal, font **Inter** (disimpan lokal, tanpa internet).
+  Mode gelap dimatikan.
+- Aplikasi kasir: bilah Keranjang muncul dan hilang dengan transisi singkat; total
+  keranjang dan angka jumlah (+/-) membesar sebentar saat berubah; ikon centang pada
+  layar sukses membesar sekali; kartu produk dibacakan sebagai tombol (nonaktif bila
+  habis) oleh pembaca layar.
+
+#### Uji manual (±20 menit)
+
+**Persiapan**
+1. Selesaikan "Langkah backend" di atas, lalu jalankan `php artisan serve`.
+2. Jalankan aplikasi di HP (`.\run_dev.cmd`), masuk sebagai kasir.
+
+**Skenario 1 — Halaman masuk dashboard**
+1. Buka `http://127.0.0.1:8000/admin/login` (bila sudah masuk, keluar dulu).
+2. Hasil yang benar: latar krem muda, tulisan **Kasir Kantin** berwarna teal tua,
+   kartu masuk berbentuk membulat, tombol **Masuk** berwarna teal. Huruf tampil dengan
+   font Inter (bentuk huruf bersih dan seragam, bukan font sistem).
+
+**Skenario 2 — Sidebar dan menu aktif**
+1. Masuk sebagai owner.
+2. Hasil yang benar: bilah atas dan sidebar sama-sama **teal tua**; nama menu
+   (Dashboard, Produk, Kategori, Transaksi, Laporan, Statistik) berwarna putih redup;
+   menu yang sedang dibuka berlatar teal lebih terang dengan teks putih tebal dan
+   garis oranye kecil di sisi kiri.
+3. Klik **Laporan**, lalu **Statistik**. Hasil yang benar: penanda menu aktif ikut
+   berpindah. Arahkan kursor ke menu lain: latarnya menyala tipis.
+
+**Skenario 3 — Isi halaman**
+1. Buka **Statistik** dan **Dashboard**.
+2. Hasil yang benar: judul halaman teal tua; kartu putih di atas latar krem; garis
+   grafik **Tren Omzet Harian** berwarna teal; tombol aksi utama berwarna teal (bukan
+   oranye); tidak ada tombol pengganti mode gelap.
+
+**Skenario 4 — Layar sempit**
+1. Kecilkan lebar jendela browser sampai di bawah ±1000 piksel.
+2. Hasil yang benar: sidebar tersembunyi dan tombol menu (☰) putih muncul di bilah atas.
+   Klik tombol itu: sidebar teal tua terbuka dan semua menu terbaca.
+
+**Skenario 5 — Bilah Keranjang dan umpan balik jumlah (HP)**
+1. Tab **Kasir**: ketuk `Nasi Goreng`.
+2. Hasil yang benar: bilah **Keranjang** muncul dari bawah dengan transisi singkat
+   (±0,2 detik), bukan tiba-tiba.
+3. Ketuk `Nasi Goreng` lagi beberapa kali. Hasil yang benar: tiap kali, total rupiah
+   di bilah membesar sedikit lalu kembali normal. Tidak memantul dan tidak menunda.
+4. Buka bilah Keranjang, ketuk **+** dan **−**. Hasil yang benar: angka jumlah
+   membesar sebentar tiap berubah.
+5. Ketuk **Kosongkan** → **Kosongkan**. Hasil yang benar: bilah Keranjang
+   menghilang dengan transisi singkat.
+
+**Skenario 6 — Layar sukses**
+1. Isi keranjang, ketuk **Bayar**, pilih **Tunai**, **Bayar Sekarang**.
+2. Hasil yang benar: ikon centang hijau membesar sekali (±0,2 detik) lalu diam;
+   tombol **Selesai** langsung bisa diketuk. Alur bayar tidak terasa lebih lambat.
+
+**Skenario 7 — Produk habis dan pembaca layar (opsional)**
+1. Habiskan stok satu produk (mis. lewat Ubah Stok di dashboard), lalu tarik layar
+   katalog ke bawah. Hasil yang benar: kartunya bertulisan **Habis** dan tidak bereaksi
+   saat diketuk.
+2. (Opsional) Nyalakan TalkBack di HP dan sentuh kartu produk. Hasil yang benar:
+   dibacakan sebagai tombol beserta nama, harga, dan stok; kartu produk habis
+   dibacakan sebagai tidak aktif. Matikan TalkBack setelahnya.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat. Bila `npm run build` gagal, salin seluruh pesan galatnya.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -1396,6 +1504,10 @@ yang muncul) ke chat.
 - Tahap 16: dashboard Filament di `backend/app/Filament/` (Resource Kategori, Produk,
   Transaksi, widget `RingkasanHariIni`), `ProductService` (ubah stok dengan selisih),
   `CategoryService` (slug unik), `DashboardSummaryService`, dan `SetAdminLocale`.
+- Tahap 19: tema dashboard `resources/css/filament/admin/theme.css` (didaftarkan lewat
+  `viteTheme` di `AdminPanelProvider`, font Inter lokal) dan di Flutter `ValuePulse`
+  (`core/widgets/`), transisi bilah Keranjang, animasi ikon sukses, dan semantik
+  `ProductCard`.
 - Tahap 18: halaman `Statistik` (`app/Filament/Pages/`), widget `StatistikPerforma`,
   `StatistikTren` (grafik), `StatistikProdukTerlaris`, `StatistikStokPerhatian`, dan
   `StatistikService` (jendela N hari WIB, tren, perbandingan, jam/hari tersibuk,
@@ -1518,13 +1630,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` (sudah dipakai) |
 | 16 | `feat(backend): dashboard filament untuk kategori, produk, dan transaksi` (sudah dipakai) |
 | 17 | `feat(backend): halaman laporan penjualan dengan filter tanggal` (sudah dipakai) |
-| 18 | `feat(backend): halaman statistik tren, produk terlaris, dan stok` |
+| 18 | `feat(backend): halaman statistik tren, produk terlaris, dan stok` (sudah dipakai) |
+| 19 | `feat: pemolesan ui dashboard teal dan gerak aplikasi kasir` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat(backend): halaman statistik tren, produk terlaris, dan stok"
+git commit -m "feat: pemolesan ui dashboard teal dan gerak aplikasi kasir"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1578,10 +1691,11 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
 14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16. Dashboard Filament ✔ →
-17. Laporan ✔ → 18. Statistik ✔ → 19. Pemolesan UI → 20. Pengujian dan integrasi akhir.
+17. Laporan ✔ → 18. Statistik ✔ → 19. Pemolesan UI ✔ → 20. Pengujian dan integrasi akhir.
 
-Catatan untuk Tahap 19: sidebar teal tua dan font kustom di dashboard (Keputusan 33),
-serta merapikan tampilan di HP dan dashboard sesuai DESIGN.md.
+Catatan untuk Tahap 20: uji menyeluruh online dan offline (AGENTS.md §27), termasuk
+transaksi offline yang tersinkron, konflik, dan semua halaman dashboard, lalu
+perapian dokumentasi akhir.
 
 ## Keputusan Tahap 14
 17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
@@ -1674,3 +1788,28 @@ serta merapikan tampilan di HP dan dashboard sesuai DESIGN.md.
 48. **Properti trait Filament tidak ditimpa dengan nilai lain.** Bug Tahap 17
     (`$persistsFiltersInSession`) diperbaiki dengan menimpa method-nya; halaman Statistik
     memakai cara yang sama.
+
+## Keputusan Tahap 19
+49. **Tema dashboard dibangun dengan Vite (tema Filament), bukan CSS statis.** Sidebar
+    teal tua butuh menimpa gaya bawaan Filament; tema resmi adalah cara yang tidak
+    rapuh saat Filament diperbarui. Konsekuensinya `npm run build` perlu dijalankan
+    (hasilnya di `public/build`, tidak masuk Git).
+50. **Font Inter dipaketkan lokal** (`@fontsource-variable/inter`) dan didaftarkan
+    dengan `LocalFontProvider`, jadi dashboard tidak bergantung CDN. Satu keluarga font
+    yang sama dengan aplikasi kasir (DESIGN.md §6).
+51. **Mode gelap dashboard dimatikan.** DESIGN.md hanya mendefinisikan palet terang;
+    mode gelap setengah jadi lebih buruk daripada tidak ada.
+52. **Teal tua untuk navigasi, teal sekunder untuk aksi dan menu aktif, coral hanya
+    penanda kecil** (garis menu aktif dan peringatan), sesuai DESIGN.md §4 ("jangan
+    pakai aksen untuk semua tombol").
+53. **Tes mematikan Vite** (`withoutVite()` di `tests/TestCase.php`) agar `php artisan test`
+    tidak gagal hanya karena build belum dijalankan.
+54. **Audit Flutter: tidak ada perombakan.** Bahasa, area sentuh, status stok, anti
+    ketuk ganda, dan skeleton katalog sudah sesuai; yang ditambah hanya gerak (§38) dan
+    semantik pembaca layar (§37). Alur kasir tidak berubah.
+55. **Gerak seminimal mungkin:** denyut 160 ms pada total/jumlah keranjang, transisi
+    tinggi 180 ms pada bilah Keranjang, ikon sukses 220 ms. Tanpa memantul dan tanpa
+    menunda kasir; denyut dimatikan bila sistem meminta animasi dikurangi.
+56. **Sengaja tidak dikerjakan:** skeleton untuk tab Riwayat dan halaman Perlu
+    Perhatian (data lokal SQLite muncul seketika, spinner singkat sudah cukup), dan
+    mode gelap di Flutter.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/value_pulse.dart';
 
 /// Kontrol jumlah [-] n [+] dengan target sentuh 44x44 (DESIGN.md §12, §36).
 /// [onIncrement] null = sudah mencapai batas stok.
@@ -31,10 +32,13 @@ class QuantityControl extends StatelessWidget {
         ),
         ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 36),
-          child: Text(
-            '$quantity',
-            style: text.titleMedium,
-            textAlign: TextAlign.center,
+          child: ValuePulse(
+            value: quantity,
+            child: Text(
+              '$quantity',
+              style: text.titleMedium,
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
         _RoundButton(

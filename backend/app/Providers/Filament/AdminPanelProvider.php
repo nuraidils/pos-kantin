@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Widgets\RingkasanHariIni;
 use App\Http\Middleware\SetAdminLocale;
+use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -29,6 +30,11 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->brandName('Kasir Kantin')
+            // Tema DESIGN.md (sidebar teal tua, font Inter lokal). Dibangun dengan
+            // `npm run build`. Mode gelap dimatikan: palet hanya dirancang untuk terang.
+            ->viteTheme('resources/css/filament/admin/theme.css')
+            ->font('Inter Variable', provider: LocalFontProvider::class)
+            ->darkMode(false)
             ->colors([
                 'primary' => Color::hex('#287B72'),   // secondary teal: aksi utama
                 'warning' => Color::hex('#F47C48'),   // coral: peringatan

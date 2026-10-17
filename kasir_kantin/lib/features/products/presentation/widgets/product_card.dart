@@ -25,6 +25,16 @@ class ProductCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final outOfStock = product.isOutOfStock;
 
+    // Pembaca layar: kartu adalah tombol; produk habis tampil nonaktif
+    // (DESIGN.md §37). Teks di dalamnya (nama, harga, stok) ikut dibacakan.
+    return Semantics(
+      button: true,
+      enabled: !outOfStock,
+      child: _card(context, text, outOfStock),
+    );
+  }
+
+  Widget _card(BuildContext context, TextTheme text, bool outOfStock) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(

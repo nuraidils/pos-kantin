@@ -54,12 +54,19 @@ class CatalogPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (!cart.isEmpty)
-                  CartBar(
-                    totalQuantity: cart.totalQuantity,
-                    totalAmount: cart.totalAmount,
-                    onTap: () => showCartSheet(context),
-                  ),
+                // Muncul dan hilang dengan transisi tinggi singkat (DESIGN.md §38).
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  alignment: Alignment.topCenter,
+                  child: cart.isEmpty
+                      ? const SizedBox(width: double.infinity)
+                      : CartBar(
+                          totalQuantity: cart.totalQuantity,
+                          totalAmount: cart.totalAmount,
+                          onTap: () => showCartSheet(context),
+                        ),
+                ),
               ],
             );
           },

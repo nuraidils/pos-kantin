@@ -47,6 +47,10 @@ class StatistikTren extends ChartWidget
                     'data' => array_column($trend, 'revenue'),
                     'tension' => 0.25,
                     'fill' => false,
+                    // Teal sekunder merek (DESIGN.md §4).
+                    'borderColor' => '#287B72',
+                    'backgroundColor' => '#287B72',
+                    'pointBackgroundColor' => '#287B72',
                 ],
             ],
             'labels' => array_column($trend, 'label'),

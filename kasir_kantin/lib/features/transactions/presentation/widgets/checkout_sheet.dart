@@ -374,7 +374,20 @@ class _SuccessView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: AppSpacing.sm),
-            const Icon(Icons.check_circle, size: 56, color: AppColors.success),
+            // Umpan balik sukses singkat (DESIGN.md §38): ikon membesar sekali,
+            // tanpa memantul dan tanpa menunda kasir.
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.7, end: 1),
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              builder: (context, scale, child) =>
+                  Transform.scale(scale: scale, child: child),
+              child: const Icon(
+                Icons.check_circle,
+                size: 56,
+                color: AppColors.success,
+              ),
+            ),
             const SizedBox(height: AppSpacing.md),
             Text(
               'Transaksi berhasil disimpan',

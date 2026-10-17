@@ -1,0 +1,127 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+/* Inter dipaketkan lokal (tanpa internet saat dashboard dibuka). */
+@import '@fontsource-variable/inter';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+/*
+ * Tema dashboard Kasir Kantin (DESIGN.md §4, §26-§28).
+ * Token: deep teal #0F4540 (navigasi), secondary teal #287B72 (aksi utama,
+ * diatur di AdminPanelProvider), coral #F47C48 (peringatan), latar #F7F8F5.
+ * Aturan di bawah tidak berlapis (unlayered), jadi mengalahkan gaya bawaan Filament.
+ */
+:root {
+    --kk-deep-teal: #0f4540;
+    --kk-teal: #287b72;
+    --kk-coral: #f47c48;
+    --kk-background: #f7f8f5;
+    --kk-on-teal: #ffffff;
+    --kk-on-teal-muted: rgb(255 255 255 / 0.78);
+    --kk-on-teal-subtle: rgb(255 255 255 / 0.55);
+}
+
+/* Latar halaman dan judul */
+.fi-body {
+    background-color: var(--kk-background);
+}
+
+.fi-header-heading {
+    color: var(--kk-deep-teal);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* Topbar dan sidebar satu bingkai teal tua */
+.fi-topbar {
+    background-color: var(--kk-deep-teal);
+    box-shadow: none;
+    --tw-ring-color: transparent;
+    border-bottom: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.fi-topbar .fi-logo,
+.fi-sidebar-header .fi-logo {
+    color: var(--kk-on-teal);
+}
+
+.fi-topbar .fi-icon-btn {
+    color: var(--kk-on-teal-muted);
+}
+
+.fi-topbar .fi-icon-btn:hover,
+.fi-topbar .fi-icon-btn:focus-visible {
+    color: var(--kk-on-teal);
+    background-color: rgb(255 255 255 / 0.1);
+}
+
+.fi-sidebar {
+    background-color: var(--kk-deep-teal);
+}
+
+.fi-sidebar.fi-sidebar-open {
+    --tw-ring-color: transparent;
+}
+
+.fi-sidebar-header {
+    background-color: var(--kk-deep-teal);
+}
+
+.fi-sidebar-nav {
+    scrollbar-color: rgb(255 255 255 / 0.25) transparent;
+}
+
+.fi-sidebar-group-label {
+    color: var(--kk-on-teal-subtle);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.fi-sidebar-item-label {
+    color: var(--kk-on-teal-muted);
+}
+
+.fi-sidebar-item-btn > .fi-icon,
+.fi-sidebar-group-btn .fi-icon {
+    color: var(--kk-on-teal-subtle);
+}
+
+.fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover,
+.fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:focus-visible {
+    background-color: rgb(255 255 255 / 0.08);
+}
+
+.fi-sidebar-item.fi-sidebar-item-has-url > .fi-sidebar-item-btn:hover .fi-sidebar-item-label {
+    color: var(--kk-on-teal);
+}
+
+/* Menu aktif: teal sekunder + penanda coral kecil */
+.fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    background-color: var(--kk-teal);
+    box-shadow: inset 3px 0 0 var(--kk-coral);
+}
+
+.fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-icon,
+.fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label {
+    color: var(--kk-on-teal);
+    font-weight: 600;
+}
+
+.fi-sidebar-footer {
+    border-color: rgb(255 255 255 / 0.12);
+}
+
+/* Halaman masuk */
+.fi-simple-layout {
+    background-color: var(--kk-background);
+}
+
+.fi-simple-layout .fi-logo {
+    color: var(--kk-deep-teal);
+}
+
+.fi-simple-main {
+    border-radius: 1rem;
+}

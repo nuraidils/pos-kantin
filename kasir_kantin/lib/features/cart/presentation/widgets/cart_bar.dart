@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/widgets/value_pulse.dart';
 
 /// Ringkasan keranjang di bawah katalog; mengetuknya membuka daftar item.
 class CartBar extends StatelessWidget {
@@ -67,9 +68,12 @@ class CartBar extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Text(
-                    formatRupiah(totalAmount),
-                    style: text.titleMedium?.merge(onPrimary),
+                  ValuePulse(
+                    value: totalAmount,
+                    child: Text(
+                      formatRupiah(totalAmount),
+                      style: text.titleMedium?.merge(onPrimary),
+                    ),
                   ),
                   const SizedBox(width: AppSpacing.xs),
                   const Icon(Icons.keyboard_arrow_up, color: Colors.white),
