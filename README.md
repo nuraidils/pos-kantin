@@ -1623,8 +1623,8 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | Tahap | Pesan commit |
 |---|---|
 | 10 | `feat(mobile): transaksi lokal dan pembayaran` (sudah dipakai) |
-| 11 | `feat(backend): api transaksi idempoten dengan validasi stok` |
-| 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` |
+| 11 | `feat(backend): api transaksi idempoten dengan validasi stok` (sudah dipakai) |
+| 12 | `feat(mobile): kirim transaksi dan status sinkronisasi lokal` (sudah dipakai) |
 | 13 | `feat(mobile): sinkronisasi otomatis transaksi ke server` (sudah dipakai) |
 | 14 | `feat(mobile): halaman konflik transaksi dan kirim ulang` (sudah dipakai) |
 | 15 | `feat(mobile): riwayat transaksi dan struk mengikuti status sinkronisasi` (sudah dipakai) |
