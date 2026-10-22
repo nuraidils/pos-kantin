@@ -1,12 +1,11 @@
 # POS Kantin — Fondasi Proyek
 
 Paket ini adalah **overlay**: kode yang disalin ke project Laravel dan Flutter
-hasil generate resmi. Isinya mencakup **tahap 1–19** dari urutan di `AGENTS.md` §30
+hasil generate resmi. Isinya mencakup **tahap 1–20** (seluruh urutan AGENTS.md §30) dari urutan di `AGENTS.md` §30
 (Laravel + database, autentikasi, kategori/produk, API produk, fondasi Flutter,
 skema SQLite lokal, autentikasi Flutter, katalog produk + sinkronisasi pull,
-keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan, statistik, pemolesan UI).
-Tahap berikutnya sengaja belum dibuat; stabilkan tiap lapisan sebelum menambah
-lapisan baru.
+keranjang, transaksi lokal, API transaksi, pengiriman transaksi dari Flutter, sinkronisasi otomatis, penanganan konflik, riwayat transaksi, dashboard Filament, laporan, statistik, pemolesan UI, pengujian akhir).
+Seluruh tahap sudah selesai. Fitur baru di luar MVP (AGENTS.md §31) sengaja tidak ada.
 
 > **Status verifikasi.** Backend: seluruh langkah setup selesai dan 13 tes lulus
 > (sudah dijalankan di komputer pengembang). Mobile: project Flutter sudah
@@ -1468,6 +1467,161 @@ sekarang mematikan Vite di `tests/TestCase.php`, jadi tidak bergantung pada hasi
 Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
 yang muncul) ke chat. Bila `npm run build` gagal, salin seluruh pesan galatnya.
 
+### 18. Tahap 20 — Pengujian akhir dan integrasi
+
+Tahap penutup: memastikan semua lapisan bekerja **bersama**, sesuai daftar uji
+AGENTS.md §27. Tidak ada fitur baru dan **tidak ada kode aplikasi yang berubah**;
+overlay hanya berisi dua tes alur lengkap.
+
+**Salin overlay:** isi folder `backend/` ke `backend\` dan isi folder `mobile/` ke
+`kasir_kantin\`.
+
+**Tes otomatis**
+```powershell
+cd C:\DIL\pos-kantin\backend
+php artisan test
+
+cd C:\DIL\pos-kantin\kasir_kantin
+flutter analyze
+flutter test
+```
+Tes baru:
+- `backend/tests/Feature/EndToEndFlowTest.php`: kasir masuk → baca katalog → kirim
+  transaksi (kiriman ulang dan stok kurang) → angka di Laporan, Dashboard, dan
+  Statistik cocok → owner menambah stok → kasir kirim ulang diterima.
+- `kasir_kantin/test/integration/offline_sync_flow_test.dart` (3 tes): SQLite berkas
+  sungguhan + SyncBloc sungguhan melawan server palsu yang idempoten. Mencakup
+  *transaksi offline → tutup dan buka aplikasi → online → sinkron → server berisi tepat
+  satu per penjualan*, *balasan server hilang lalu kirim ulang*, dan *konflik stok →
+  stok ditambah → Kirim Ulang*.
+
+**Peta AGENTS.md §27 ke tes otomatis**
+
+| Butir §27 | Dicek oleh |
+|---|---|
+| Login benar/salah, keluar, peran tidak sah | `AuthApiTest`, `AdminAccessTest`, `auth_bloc_test`, `login_page_test` |
+| Produk: ambil, tampil lokal, cari/filter, nonaktif/terhapus | `CatalogApiTest`, `catalog_local_data_source_test`, `catalog_bloc_test`, `catalog_page_test` |
+| Keranjang: tambah, hapus, +/-, kosongkan, batas stok | `cart_bloc_test`, `cart_widgets_test` |
+| Transaksi online/offline, tersimpan lokal, restart, riwayat | `TransactionApiTest`, `transaction_local_data_source_test`, `transaction_sync_status_test`, `history_*_test`, `offline_sync_flow_test` |
+| Sinkron: berhasil, UUID sama, jaringan/server gagal, konflik stok, coba lagi | `TransactionApiTest`, `sync_bloc_test`, `transaction_repository_impl_test`, `transaction_conflict_test`, `offline_sync_flow_test` |
+| Persistensi: buat → tutup/buka → masih ada; offline → sinkron → tepat satu di server | `transaction_sync_status_test`, `offline_sync_flow_test`, `EndToEndFlowTest` |
+
+#### Uji manual akhir (±30 menit, di HP dan browser)
+
+Bagian yang tidak bisa dibuktikan tes otomatis: HP sungguhan, server sungguhan,
+dan tampilan dashboard.
+
+**Persiapan**
+1. Pastikan katalog ada: `php artisan db:seed --class=CatalogSeeder` di `backend\`
+   (aman dijalankan berulang). Data lama dibiarkan; akun owner dan kasir tidak diubah.
+2. Terminal 1: `php artisan serve`. Pastikan `npm run build` pernah dijalankan.
+3. HP: `.\run_dev.cmd` di `kasir_kantin\`. Browser: `http://127.0.0.1:8000/admin`
+   masuk sebagai owner.
+4. Terminal 2 (`backend\`), catat jumlah transaksi awal `N`:
+   ```powershell
+   php artisan tinker --execute="echo App\Models\Transaction::count();"
+   ```
+
+**Skenario 1 — Akun dan peran**
+1. Di HP, masuk dengan kata sandi **salah**. Hasil yang benar: pesan galat dalam
+   bahasa Indonesia, tetap di halaman masuk.
+2. Masuk dengan akun **owner** di HP. Hasil yang benar: ditolak (owner memakai
+   dashboard web).
+3. Masuk dengan akun **kasir**. Hasil yang benar: masuk ke tab Kasir.
+4. Di browser, buka `/admin/login` dengan akun kasir. Hasil yang benar: ditolak
+   (pesan Kredensial yang diberikan tidak dapat ditemukan.).
+
+**Skenario 2 — Katalog**
+1. Di HP, cari `nasi`, lalu pilih kategori. Hasil yang benar: daftar menyempit sesuai.
+2. Di dashboard, nonaktifkan satu produk (Produk → Ubah → matikan **Aktif**), lalu
+   di HP tarik layar katalog ke bawah. Hasil yang benar: produk itu hilang dari katalog.
+   Aktifkan kembali dan tarik ulang: muncul lagi.
+3. Matikan Wi-Fi/data HP. Hasil yang benar: katalog tetap tampil ("Data lokal digunakan"),
+   tanpa pesan galat. Nyalakan kembali.
+
+**Skenario 3 — Keranjang**
+1. Ketuk `Nasi Goreng` tiga kali, ketuk `Es Teh Manis` sekali. Hasil yang benar: bilah
+   Keranjang menampilkan 4 item dan total yang benar.
+2. Buka keranjang: **+**, **−**, ikon hapus, lalu **Kosongkan**. Hasil yang benar: tiap
+   aksi bekerja; jumlah tidak pernah menjadi 0 (baris hilang); **+** nonaktif di batas stok.
+
+**Skenario 4 — Transaksi online**
+1. Isi keranjang, **Bayar** → **Tunai** → **Bayar Sekarang**.
+2. Hasil yang benar: struk "Transaksi berhasil disimpan"; dalam ≤30 detik tab Riwayat
+   menunjukkan **Tersinkron**. Jumlah transaksi di server menjadi `N + 1`.
+
+**Skenario 5 — Offline, tutup aplikasi, lalu sinkron**
+1. Hentikan server (`Ctrl+C` di Terminal 1).
+2. Di HP buat **2** transaksi (satu Tunai, satu QRIS). Hasil yang benar: keduanya
+   berhasil disimpan tanpa menunggu; Riwayat menampilkan status belum tersinkron.
+3. **Tutup paksa** aplikasi (geser dari daftar aplikasi) lalu buka lagi. Hasil yang
+   benar: tetap masuk, kedua transaksi masih ada di Riwayat, stok produk tetap berkurang.
+4. Nyalakan server (`php artisan serve`). Tunggu sampai 30 detik. Hasil yang benar:
+   keduanya menjadi **Tersinkron**; jumlah transaksi di server `N + 3`, **tepat 2
+   tambahan**, tidak lebih.
+5. Tunggu 1 menit lagi dan hitung ulang. Hasil yang benar: tetap `N + 3`.
+
+**Skenario 6 — Kiriman ganda dan server bermasalah**
+1. Di `backend\`: `.\coba-transaksi.ps1 -Email kasir@kantin.test -Password <kata sandi>`.
+   Hasil yang benar: tiga langkah berhasil (201, lalu 200 untuk UUID yang sama dengan stok
+   tidak berkurang lagi, lalu 409 untuk stok kurang).
+2. Simulasi server rusak: `php artisan down`. Di HP bayar 1 transaksi. Hasil yang benar:
+   transaksi tersimpan, status gagal/menunggu dengan pesan yang tenang, tidak hilang.
+3. `php artisan up`, tunggu ≤30 detik. Hasil yang benar: transaksi tadi menjadi
+   **Tersinkron** (tepat sekali).
+
+**Skenario 7 — Konflik stok**
+Ulangi **Skenario 6 dari Uji Manual Tahap 17** (konflik diselesaikan lewat Ubah Stok →
+Kirim Ulang). Hasil yang benar: sama persis dengan yang tertulis di sana.
+
+**Skenario 8 — Dashboard cocok dengan perangkat**
+1. Di dashboard buka **Laporan** dengan rentang hari ini. Hasil yang benar: **Jumlah
+   Transaksi** sama dengan jumlah transaksi **Tersinkron** hari ini di tab Riwayat HP.
+2. Total Tunai + total QRIS = Total Omzet.
+3. Buka **Statistik** (7 hari). Hasil yang benar: produk terlaris sesuai yang tadi dijual;
+   **Stok Perlu Perhatian** menampilkan produk yang stoknya ≤5.
+
+**Skenario 9 — Keluar akun**
+1. Di HP, buat 1 transaksi saat server mati, lalu Pengaturan → **Keluar**. Hasil yang
+   benar: kamu diberi tahu ada transaksi belum tersinkron, dan setelah keluar lalu masuk
+   lagi, transaksinya masih ada dan tersinkron setelah server menyala.
+
+#### Panduan demo untuk presentasi (±10 menit)
+
+Urutan yang menceritakan inti proyek:
+1. **Masalah dan tujuan** (1 menit): kantin sering kehilangan sinyal; kasir tidak boleh
+   berhenti berjualan.
+2. **Kasir online** (2 menit): pilih produk → Bayar Tunai → Tersinkron → muncul di
+   dashboard (Laporan dan Dashboard).
+3. **Offline-first** (3 menit): matikan server → 2 transaksi → tutup paksa aplikasi → buka
+   → data masih ada → nyalakan server → tersinkron, jumlah di server tepat.
+4. **Konflik stok** (2 menit): stok server habis → transaksi "perlu perhatian" → owner
+   Ubah Stok → Kirim Ulang → diterima.
+5. **Owner** (2 menit): Produk/Kategori, Laporan (filter tanggal), Statistik (tren, terlaris).
+
+Siapkan sebelum tampil: Persiapan di atas sudah dijalankan, baterai HP cukup, dan satu
+terminal untuk mematikan/menyalakan server dengan cepat.
+
+#### Daftar periksa serah-terima
+- [ ] `php artisan test` hijau, `flutter analyze` tanpa isu, `flutter test` hijau.
+- [ ] `npm run build` berhasil; `git status` bersih setelah commit.
+- [ ] `.env` dan `public\build` tidak ada di Git (sudah di `.gitignore`).
+- [ ] README ini dan `AGENTS.md`/`DESIGN.md` ada di repositori.
+- [ ] (Opsional) tandai rilis: `git tag v1.0.0` lalu `git push --tags`.
+
+#### Batasan yang diketahui (sengaja, sesuai lingkup tugas)
+- Transaksi `conflict` tidak pernah sampai ke server, jadi tidak terlihat di dashboard
+  (Keputusan 17 dan 33). Penyelesaiannya: owner Ubah Stok, kasir Kirim Ulang.
+- Satu kasir aktif; tanpa pajak, diskon, cetak struk, pemindai barcode, atau gateway
+  QRIS (QRIS hanya penanda metode bayar). Semua di luar MVP (AGENTS.md §31).
+- Laporan dan Statistik hanya menghitung transaksi yang sudah sampai ke server.
+- Dashboard hanya terang (tanpa mode gelap); aplikasi kasir tidak memakai mode gelap.
+- Tes Laravel/Flutter di repositori ini dijalankan di komputer pengembang; tidak ada
+  CI otomatis.
+
+Bila ada hasil yang berbeda dari "hasil yang benar", salin deskripsinya (dan teks
+yang muncul) ke chat.
+
 ### Yang sudah ada
 - `core/theme`: token warna/spasi/radius + `ThemeData` dari DESIGN.md.
 - `core/database/app_database.dart`: skema SQLite v1 (kategori, produk,
@@ -1504,6 +1658,8 @@ yang muncul) ke chat. Bila `npm run build` gagal, salin seluruh pesan galatnya.
 - Tahap 16: dashboard Filament di `backend/app/Filament/` (Resource Kategori, Produk,
   Transaksi, widget `RingkasanHariIni`), `ProductService` (ubah stok dengan selisih),
   `CategoryService` (slug unik), `DashboardSummaryService`, dan `SetAdminLocale`.
+- Tahap 20: `backend/tests/Feature/EndToEndFlowTest.php` dan
+  `kasir_kantin/test/integration/offline_sync_flow_test.dart` (alur lengkap lintas lapisan).
 - Tahap 19: tema dashboard `resources/css/filament/admin/theme.css` (didaftarkan lewat
   `viteTheme` di `AdminPanelProvider`, font Inter lokal) dan di Flutter `ValuePulse`
   (`core/widgets/`), transisi bilah Keranjang, animasi ikon sukses, dan semantik
@@ -1631,13 +1787,14 @@ Lingkup: `backend` atau `mobile`. Satu tahap = satu commit.
 | 16 | `feat(backend): dashboard filament untuk kategori, produk, dan transaksi` (sudah dipakai) |
 | 17 | `feat(backend): halaman laporan penjualan dengan filter tanggal` (sudah dipakai) |
 | 18 | `feat(backend): halaman statistik tren, produk terlaris, dan stok` (sudah dipakai) |
-| 19 | `feat: pemolesan ui dashboard teal dan gerak aplikasi kasir` |
+| 19 | `feat: pemolesan ui dashboard teal dan gerak aplikasi kasir` (sudah dipakai) |
+| 20 | `test: alur lengkap offline ke sinkron dan dashboard, panduan uji akhir` |
 
 Perintahnya (PowerShell, dari `C:\DIL\pos-kantin`):
 ```powershell
 git status
 git add -A
-git commit -m "feat: pemolesan ui dashboard teal dan gerak aplikasi kasir"
+git commit -m "test: alur lengkap offline ke sinkron dan dashboard, panduan uji akhir"
 git push
 ```
 Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
@@ -1691,11 +1848,11 @@ Pesan untuk tahap berikutnya selalu diberikan di akhir tiap tahap.
 9. Keranjang ✔ → 10. Transaksi lokal ✔ → 11. API transaksi ✔ → 12. Kirim transaksi
 (lapisan data) ✔ → 13. Sinkronisasi otomatis ✔ →
 14. Penanganan konflik ✔ → 15. Riwayat transaksi ✔ → 16. Dashboard Filament ✔ →
-17. Laporan ✔ → 18. Statistik ✔ → 19. Pemolesan UI ✔ → 20. Pengujian dan integrasi akhir.
+17. Laporan ✔ → 18. Statistik ✔ → 19. Pemolesan UI ✔ → 20. Pengujian dan integrasi akhir ✔.
 
-Catatan untuk Tahap 20: uji menyeluruh online dan offline (AGENTS.md §27), termasuk
-transaksi offline yang tersinkron, konflik, dan semua halaman dashboard, lalu
-perapian dokumentasi akhir.
+Seluruh urutan AGENTS.md §30 selesai. Pengembangan lanjutan (di luar MVP, AGENTS.md §31)
+sebaiknya dimulai dari "Batasan yang diketahui" di bagian Tahap 20, satu per satu,
+dengan aturan yang sama: satu tahap, uji otomatis dan manual, lalu commit.
 
 ## Keputusan Tahap 14
 17. **Satu-satunya tindakan kasir pada konflik adalah Kirim Ulang.** Tidak ada hapus
@@ -1813,3 +1970,17 @@ perapian dokumentasi akhir.
 56. **Sengaja tidak dikerjakan:** skeleton untuk tab Riwayat dan halaman Perlu
     Perhatian (data lokal SQLite muncul seketika, spinner singkat sudah cukup), dan
     mode gelap di Flutter.
+
+## Keputusan Tahap 20
+57. **Tidak ada kode aplikasi yang diubah.** Tahap penutup hanya menambah tes dan
+    dokumentasi; bug yang ditemukan di sini harus diperbaiki sebagai commit terpisah
+    agar jejaknya jelas.
+58. **Tes integrasi memakai server palsu yang meniru kontrak Laravel** (201 baru, 200
+    duplikat, 409 `insufficient_stock`), bukan server sungguhan. Kontraknya sudah dijaga
+    `TransactionApiTest` di sisi Laravel; tes ini membuktikan sisi Flutter memakainya
+    dengan benar, tanpa bergantung pada jaringan atau MySQL.
+59. **Tes alur Flutter memakai SQLite berkas dan menutup lalu membuka database lagi**
+    untuk mewakili "aplikasi ditutup dan dibuka", satu-satunya cara mensimulasikan
+    persistensi yang jujur (basis data memori tidak selamat dari penutupan).
+60. **Simulasi "server bermasalah" di uji manual memakai `php artisan down`** (503):
+    cara paling aman dan dapat dibatalkan dengan `php artisan up`.
