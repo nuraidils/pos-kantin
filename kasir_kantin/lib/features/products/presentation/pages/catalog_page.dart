@@ -37,6 +37,8 @@ class CatalogPage extends StatelessWidget {
                     onRefresh: () => _refresh(context),
                     child: CustomScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       slivers: [
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(
@@ -224,20 +226,47 @@ class _SearchField extends StatefulWidget {
   State<_SearchField> createState() => _SearchFieldState();
 }
 
-class _SearchFieldState extends State<_SearchField> {
+class _SearchFieldState extends State<_SearchField>
+    with WidgetsBindingObserver {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  bool _keyboardWasOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Saat keyboard ditutup (tombol kembali/turun), fokus ikut dilepas agar
+  /// kolom tidak terlihat masih aktif.
+  @override
+  void didChangeMetrics() {
+    final view = View.maybeOf(context);
+    if (view == null) return;
+    final open = view.viewInsets.bottom > 0;
+    if (_keyboardWasOpen && !open && _focusNode.hasFocus) {
+      _focusNode.unfocus();
+    }
+    _keyboardWasOpen = open;
   }
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
+      focusNode: _focusNode,
       onChanged: widget.onChanged,
+      onTapOutside: (_) => _focusNode.unfocus(),
+      onSubmitted: (_) => _focusNode.unfocus(),
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
         hintText: 'Cari produk...',

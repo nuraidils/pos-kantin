@@ -118,8 +118,13 @@ class EndToEndFlowTest extends TestCase
         $this->assertSame(45000, $terlaris[0]['revenue']);
         $this->assertSame('Es Teh', $terlaris[1]['name']);
 
+        // Permintaan API tadi membuat guard bawaan menjadi "sanctum"; bersihkan
+        // dan tegaskan guard "web" agar owner benar-benar login di panel.
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders();
+
         foreach (['/admin', '/admin/transactions', '/admin/laporan', '/admin/statistik'] as $halaman) {
-            $this->actingAs($owner)->get($halaman)->assertOk();
+            $this->actingAs($owner, 'web')->get($halaman)->assertOk();
         }
 
         // 5. Owner menambah stok lewat layanan yang sama dengan aksi "Ubah Stok".
@@ -128,6 +133,7 @@ class EndToEndFlowTest extends TestCase
 
         // Sesi web owner tidak boleh terbawa ke permintaan API kasir berikutnya.
         $this->app['auth']->forgetGuards();
+        $this->app['auth']->shouldUse('sanctum');
 
         // 6. Kasir mengirim ulang transaksi yang tadi ditolak: kini diterima.
         $this->withToken($token)->postJson('/api/transactions', $c)

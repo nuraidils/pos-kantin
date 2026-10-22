@@ -1575,8 +1575,13 @@ Ulangi **Skenario 6 dari Uji Manual Tahap 17** (konflik diselesaikan lewat Ubah 
 Kirim Ulang). Hasil yang benar: sama persis dengan yang tertulis di sana.
 
 **Skenario 8 — Dashboard cocok dengan perangkat**
-1. Di dashboard buka **Laporan** dengan rentang hari ini. Hasil yang benar: **Jumlah
-   Transaksi** sama dengan jumlah transaksi **Tersinkron** hari ini di tab Riwayat HP.
+1. Di dashboard buka **Laporan** dengan rentang hari ini. Laporan menghitung **semua**
+   transaksi di server, termasuk yang dibuat `.\coba-transaksi.ps1` (Skenario 6) atau dari
+   HP/database lain. Jadi bandingkan **selisihnya**: Jumlah Transaksi Laporan =
+   (transaksi Tersinkron hari ini di Riwayat HP) + (jumlah transaksi yang dibuat skrip,
+   biasanya 1). Hasil yang benar: selisih persis sebanyak transaksi yang bukan dari HP ini.
+   Untuk angka yang sama persis, jalankan Skenario 8 pada database server yang baru
+   dikosongkan sebelum membuat transaksi dari HP.
 2. Total Tunai + total QRIS = Total Omzet.
 3. Buka **Statistik** (7 hari). Hasil yang benar: produk terlaris sesuai yang tadi dijual;
    **Stok Perlu Perhatian** menampilkan produk yang stoknya ≤5.

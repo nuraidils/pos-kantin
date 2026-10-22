@@ -307,5 +307,21 @@ void main() {
       expect(find.text('Rp30.000'), findsOneWidget);
       expect(find.text('2'), findsOneWidget); // lencana jumlah pada kartu
     });
+
+    testWidgets('kolom cari kehilangan fokus saat mengetuk di luar', (
+      tester,
+    ) async {
+      await pumpPage(tester, ready());
+
+      await tester.tap(find.byKey(const ValueKey('catalog-search')));
+      await tester.pump();
+      EditableText editable() =>
+          tester.widget<EditableText>(find.byType(EditableText));
+      expect(editable().focusNode.hasFocus, isTrue);
+
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pump();
+      expect(editable().focusNode.hasFocus, isFalse);
+    });
   });
 }
